@@ -1,0 +1,55 @@
+import type { Theme, ThemeName } from '../types';
+
+export const themes: Record<ThemeName, Theme> = {
+  twilight: {
+    name: 'Twilight',
+    classes: {
+      appBg: 'bg-gray-900',
+      headerBg: 'bg-gray-800',
+      cardBg: 'bg-gray-800/50',
+      cardBorder: 'border-gray-700',
+      textAccent: 'text-blue-400',
+      textMuted: 'text-gray-400',
+      buttonBg: 'bg-blue-500',
+      buttonHoverBg: 'hover:bg-blue-600',
+      buttonRing: 'focus:ring-blue-500',
+      buttonFocusRingOffset: 'focus:ring-offset-gray-800',
+      navButtonActiveBg: 'bg-blue-500',
+      navButtonHoverBg: 'hover:bg-gray-600',
+    },
+  },
+  crimson: {
+    name: 'Crimson Chef',
+    classes: {
+      appBg: 'bg-gray-900',
+      headerBg: 'bg-gray-800',
+      cardBg: 'bg-gray-800/50',
+      cardBorder: 'border-gray-700',
+      textAccent: 'text-red-400',
+      textMuted: 'text-gray-400',
+      buttonBg: 'bg-red-600',
+      buttonHoverBg: 'hover:bg-red-700',
+      buttonRing: 'focus:ring-red-500',
+      buttonFocusRingOffset: 'focus:ring-offset-gray-800',
+      navButtonActiveBg: 'bg-red-600',
+      navButtonHoverBg: 'hover:bg-gray-600',
+    },
+  },
+  evergreen: {
+    name: 'Evergreen',
+    classes: {
+      appBg: 'bg-green-950',
+      headerBg: 'bg-green-900',
+      cardBg: 'bg-green-900/50',
+      cardBorder: 'border-green-800',
+      textAccent: 'text-green-400',
+      textMuted: 'text-gray-400',
+      buttonBg: 'bg-green-600',
+      buttonHoverBg: 'hover:bg-green-700',
+      buttonRing: 'focus:ring-green-500',
+      buttonFocusRingOffset: 'focus:ring-offset-green-900',
+      navButtonActiveBg: 'bg-green-600',
+      navButtonHoverBg: 'hover:bg-green-800',
+    },
+  },
+};

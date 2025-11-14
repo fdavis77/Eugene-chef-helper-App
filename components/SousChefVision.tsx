@@ -1,0 +1,273 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { analyzeImage } from '../services/geminiService';
+import { Card } from './common/Card';
+import { Loader } from './common/Loader';
+import { Icon } from './common/Icon';
+
+const SousChefVision: React.FC = () => {
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [prompt, setPrompt] = useState<string>('');
+  const [analysis, setAnalysis] = useState<string>('');
+  const [isLoading, setIsLoading] = useState<false | 'prompt' | 'macro'>(false);
+  const [error, setError] = useState<string>('');
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  useEffect(() => {
+    if (isCameraOpen) {
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                streamRef.current = stream;
+                if (videoRef.current) {
+                    videoRef.current.srcObject = stream;
+                }
+            })
+            .catch(err => {
+                console.error("Error accessing camera: ", err);
+                setError("Could not access camera. Please grant permission and try again.");
+                setIsCameraOpen(false);
+            });
+    } else {
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+            streamRef.current = null;
+        }
+    }
+    return () => {
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+        }
+    };
+  }, [isCameraOpen]);
+
+  const toBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve((reader.result as string).split(',')[1]);
+      reader.onerror = (error) => reject(error);
+    });
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (file.size > 4 * 1024 * 1024) { // 4MB limit
+        setError('Image file is too large. Please select a file under 4MB.');
+        return;
+      }
+      setImageFile(file);
+      setImageUrl(URL.createObjectURL(file));
+      setError('');
+      setAnalysis('');
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setImageFile(null);
+    setImageUrl(null);
+    if(fileInputRef.current) {
+        fileInputRef.current.value = '';
+    }
+  };
+
+  const handleAnalyze = async () => {
+    if (!imageFile || !prompt.trim()) {
+      setError('Please upload an image and enter a prompt.');
+      return;
+    }
+    setError('');
+    setAnalysis('');
+    setIsLoading('prompt');
+
+    try {
+      const imageBase64 = await toBase64(imageFile);
+      const result = await analyzeImage(prompt, imageBase64, imageFile.type);
+      setAnalysis(result);
+    } catch (err) {
+      setError('Failed to analyze image. Please try again.');
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleMacroAnalysis = async () => {
+    if (!imageFile) {
+      setError('Please upload an image for macro analysis.');
+      return;
+    }
+    setError('');
+    setAnalysis('');
+    setIsLoading('macro');
+
+    try {
+      const imageBase64 = await toBase64(imageFile);
+      const macroPrompt = "Analyze the food in this image. Identify all visible ingredients and provide a rough estimate of the total calories for the dish shown. Format the response with a list of ingredients and a clear calorie count.";
+      const result = await analyzeImage(macroPrompt, imageBase64, imageFile.type);
+      setAnalysis(result);
+    // fix: The catch block was missing braces, which caused a syntax error and subsequent scope issues.
+    } catch (err) {
+      setError('Failed to get macro analysis. Please try again.');
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const openCamera = () => {
+    handleRemoveImage();
+    setError('');
+    setIsCameraOpen(true);
+  };
+  
+  const handleCapture = () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (video && canvas) {
+        const context = canvas.getContext('2d');
+        if (context) {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+            
+            canvas.toBlob(blob => {
+                if (blob) {
+                    const imageFile = new File([blob], 'capture.jpg', { type: 'image/jpeg' });
+                    setImageFile(imageFile);
+                    setImageUrl(URL.createObjectURL(imageFile));
+                    setAnalysis('');
+                    setIsCameraOpen(false);
+                }
+            }, 'image/jpeg');
+        }
+    }
+  };
+
+  // fix: The component was missing its return statement and JSX content.
+  return (
+    <div className="space-y-6">
+      <Card>
+        <h2 className="text-xl font-semibold text-blue-400 mb-4 flex items-center">
+            <Icon name="visibility" className="h-6 w-6 mr-2" />
+            Sous-Chef Vision
+        </h2>
+        <p className="text-gray-400 mb-4">Upload an image or use your camera to identify ingredients, get calorie estimates, or ask your own questions for instant analysis.</p>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="flex flex-col items-center justify-center bg-gray-800 border-2 border-dashed border-gray-600 rounded-lg p-6 text-center h-full min-h-[250px]">
+                {imageUrl ? (
+                    <div className="relative w-full h-full flex items-center justify-center">
+                        <img src={imageUrl} alt="Preview" className="max-h-64 w-auto object-contain rounded-md mx-auto"/>
+                        <button onClick={handleRemoveImage} className="absolute top-2 right-2 bg-red-600/80 hover:bg-red-600 text-white rounded-md p-1.5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-red-500">
+                           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
+                ) : (
+                    <div>
+                        <Icon name="image" className="mx-auto h-12 w-12 text-gray-500" />
+                        <p className="mt-2 text-gray-400">Drag & drop or</p>
+                         <div className="mt-2 flex justify-center gap-4">
+                            <button onClick={() => fileInputRef.current?.click()} className="text-blue-400 hover:underline font-semibold">
+                                upload an image
+                            </button>
+                            <span className="text-gray-600">|</span>
+                            <button onClick={openCamera} className="text-blue-400 hover:underline font-semibold flex items-center gap-2">
+                                <Icon name="camera" className="h-4 w-4" /> Use Camera
+                            </button>
+                        </div>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/png, image/jpeg, image/webp"
+                            onChange={handleFileChange}
+                            className="hidden"
+                            aria-label="Upload image"
+                        />
+                        <p className="text-xs text-gray-500 mt-2">PNG, JPG, WEBP up to 4MB</p>
+                    </div>
+                )}
+            </div>
+            {/* Prompt & Action */}
+            <div className="flex flex-col">
+                 <textarea
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                    placeholder="e.g., Identify potential allergens in this dish, or suggest a wine pairing."
+                    className="flex-grow bg-gray-800 border border-gray-600 rounded-md p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none transition resize-none"
+                    rows={6}
+                    aria-label="Prompt for image analysis"
+                />
+                <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                    <button
+                        onClick={handleAnalyze}
+                        disabled={!!isLoading || !imageFile || !prompt.trim()}
+                        className="w-full bg-blue-500 text-white font-bold py-3 px-6 rounded-md hover:bg-blue-600 transition duration-300 disabled:bg-gray-500 flex items-center justify-center"
+                        aria-label="Analyze Image with custom prompt"
+                    >
+                        {isLoading === 'prompt' ? <Loader /> : 'Analyze with Prompt'}
+                    </button>
+                    <button
+                        onClick={handleMacroAnalysis}
+                        disabled={!!isLoading || !imageFile}
+                        className="w-full bg-teal-500 text-white font-bold py-3 px-6 rounded-md hover:bg-teal-600 transition duration-300 disabled:bg-gray-500 flex items-center justify-center"
+                        aria-label="Get Macro Analysis"
+                    >
+                        {isLoading === 'macro' ? <Loader /> : 
+                        (
+                            <>
+                                <Icon name="chart-pie" className="h-5 w-5 mr-2"/>
+                                Get Macro Analysis
+                            </>
+                        )}
+                    </button>
+                </div>
+            </div>
+        </div>
+        {error && <p className="text-red-400 mt-4">{error}</p>}
+      </Card>
+      
+      {(isLoading || analysis) && (
+        <Card>
+            <h3 className="text-lg font-semibold text-blue-400 mb-4">Analysis Result</h3>
+            {isLoading ? (
+                <div className="flex flex-col items-center justify-center p-8">
+                    <Loader />
+                    <p className="mt-4 text-gray-400">Analyzing image...</p>
+                </div>
+            ) : (
+                analysis && <pre className="whitespace-pre-wrap font-sans bg-gray-800 p-4 rounded-md text-gray-300">{analysis}</pre>
+            )}
+        </Card>
+      )}
+
+      {isCameraOpen && (
+        <div className="fixed inset-0 bg-black/80 flex flex-col items-center justify-center z-50 p-4">
+            <video ref={videoRef} autoPlay playsInline className="w-full max-w-lg rounded-lg shadow-2xl"></video>
+            <canvas ref={canvasRef} className="hidden"></canvas>
+            <div className="mt-6 flex gap-4">
+                <button 
+                    onClick={handleCapture} 
+                    className="bg-blue-500 text-white font-bold py-3 px-6 rounded-md hover:bg-blue-600 transition duration-300 flex items-center gap-2"
+                >
+                    <Icon name="camera" className="h-6 w-6"/>
+                    Capture
+                </button>
+                <button 
+                    onClick={() => setIsCameraOpen(false)} 
+                    className="bg-gray-700 text-gray-300 font-bold py-3 px-6 rounded-md hover:bg-gray-600 transition duration-300"
+                >
+                    Close
+                </button>
+            </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default SousChefVision;
