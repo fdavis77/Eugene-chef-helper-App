@@ -75,7 +75,7 @@ const VerifyCode: React.FC<VerifyCodeProps> = ({ phoneNumber, onContinue, onBack
         {code.map((digit, index) => (
           <input
             key={index}
-            ref={el => inputsRef.current[index] = el}
+            ref={el => { inputsRef.current[index] = el; }}
             type="tel"
             maxLength={1}
             value={digit}

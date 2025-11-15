@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { gql, useQuery, useMutation } from '@apollo/client';
+// fix: Import useQuery and useMutation from '@apollo/client/react' to resolve module export issue.
+import { gql } from '@apollo/client';
+import { useQuery, useMutation } from '@apollo/client/react';
 import { getMenuInspiration, getIngredientList } from '../services/geminiService';
 import { Card } from './common/Card';
 import { Loader } from './common/Loader';
@@ -40,6 +42,17 @@ const DELETE_NOTE_MUTATION = gql`
     }
   }
 `;
+
+// fix: Add interfaces for GraphQL results to provide strong typing for query and mutation hooks.
+interface ListNotesData {
+  listNotes: Note[];
+}
+
+interface DeleteNoteData {
+  deleteNote: {
+    id: string;
+  };
+}
 
 interface MenuInspirationProps {
   plannedItems: Record<string, CalendarDay>;
@@ -208,17 +221,20 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ plannedItems, onUpdat
   const isInitialMount = useRef(true);
 
   // Fetch notes using Apollo Client
-  const { data: notesData, loading: notesLoading, error: notesError } = useQuery(LIST_NOTES_QUERY);
+  // fix: Provide the ListNotesData type to useQuery for type safety.
+  const { data: notesData, loading: notesLoading, error: notesError } = useQuery<ListNotesData>(LIST_NOTES_QUERY);
   const notes = (notesData?.listNotes || []).slice().sort((a: Note, b: Note) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
   // Define mutations for updating and deleting notes
   const [updateNote] = useMutation(UPDATE_NOTE_MUTATION);
-  const [deleteNote] = useMutation(DELETE_NOTE_MUTATION, {
-    update(cache, { data: { deleteNote } }) {
+  // fix: Provide DeleteNoteData type to useMutation and safely handle the result in the update function.
+  const [deleteNote] = useMutation<DeleteNoteData>(DELETE_NOTE_MUTATION, {
+    update(cache, { data }) {
+      if (!data?.deleteNote) return;
       cache.modify({
         fields: {
           listNotes(existingNotes = []) {
-            return existingNotes.filter((noteRef: any) => noteRef.__ref !== `Note:${deleteNote.id}`);
+            return existingNotes.filter((noteRef: any) => noteRef.__ref !== `Note:${data.deleteNote.id}`);
           },
         },
       });

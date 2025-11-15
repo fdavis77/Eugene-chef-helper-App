@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI, Chat } from '@google/genai';
-import { gql, useQuery, useMutation } from '@apollo/client';
+// fix: Import useQuery and useMutation from '@apollo/client/react' to resolve module export issue.
+import { gql } from '@apollo/client';
+import { useQuery, useMutation } from '@apollo/client/react';
 import { useGeminiLive } from '../hooks/useGeminiLive';
 import { Card } from './common/Card';
 import { Icon } from './common/Icon';
@@ -52,6 +54,11 @@ const CREATE_HACCP_LOG_MUTATION = gql`
   }
 `;
 
+// fix: Add interface for the GraphQL query result to provide strong typing.
+interface ListNotesData {
+  listNotes: { id: string }[];
+}
+
 type AvatarState = 'idle' | 'listening' | 'thinking' | 'speaking';
 
 const ChefBot: React.FC<ChefBotProps> = ({
@@ -70,7 +77,8 @@ const ChefBot: React.FC<ChefBotProps> = ({
   const chatRef = useRef<Chat | null>(null);
   
   // Data fetching and mutations
-  const { data: notesData } = useQuery(LIST_NOTES_QUERY);
+  // fix: Provide the ListNotesData type to useQuery for type safety.
+  const { data: notesData } = useQuery<ListNotesData>(LIST_NOTES_QUERY);
   const notesCount = notesData?.listNotes?.length ?? 0;
 
   const [createNote] = useMutation(CREATE_NOTE_MUTATION, {

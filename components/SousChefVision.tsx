@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { gql, useMutation } from '@apollo/client';
+// fix: Import useMutation from '@apollo/client/react' to resolve module export issue.
+import { gql } from '@apollo/client';
+import { useMutation } from '@apollo/client/react';
 import { analyzeImage } from '../services/geminiService';
 import { Card } from './common/Card';
 import { Loader } from './common/Loader';

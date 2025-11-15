@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { gql, useQuery, useMutation } from '@apollo/client';
+import { gql } from '@apollo/client';
+import { useQuery, useMutation } from '@apollo/client/react';
 import { Card } from './common/Card';
 import { Icon } from './common/Icon';
 import { Loader } from './common/Loader';
@@ -44,13 +45,6 @@ const CREATE_HACCP_LOG_MUTATION = gql`
       correctiveAction: $correctiveAction
     ) {
       id
-      type
-      label
-      date
-      time
-      temperature
-      checkedBy
-      correctiveAction
     }
   }
 `;
@@ -85,6 +79,67 @@ const DELETE_HACCP_LOG_MUTATION = gql`
   }
 `;
 
+interface ListHaccpLogsData {
+  listHaccpLogs: HaccpLog[];
+}
+
+const LogEntryModal: React.FC<{
+  log: Partial<HaccpLog>;
+  onClose: () => void;
+  onSave: (log: Partial<HaccpLog>) => void;
+  onDelete: (id: string) => void;
+}> = ({ log, onClose, onSave, onDelete }) => {
+  const [currentLog, setCurrentLog] = useState(log);
+  const isNew = !log.id;
+
+  const handleSave = () => {
+    if (currentLog.label && currentLog.temperature) {
+      onSave(currentLog);
+    }
+  };
+  
+  const getTempColorClass = (tempStr: string, type?: 'Fridge' | 'Freezer') => {
+      const temp = parseFloat(tempStr);
+      if (isNaN(temp)) return 'border-medium focus:ring-black';
+      if (type === 'Fridge' && (temp > 8 || temp < 1)) return 'border-red-500 ring-1 ring-red-500 focus:ring-red-500';
+      if (type === 'Freezer' && temp > -18) return 'border-red-500 ring-1 ring-red-500 focus:ring-red-500';
+      return 'border-green-500 focus:ring-green-500';
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="w-full max-w-md bg-white rounded-2xl" onClick={e => e.stopPropagation()}>
+        <Card>
+          <h3 className="text-lg font-bold text-dark mb-4">{isNew ? 'Add' : 'Edit'} {log.type} Log</h3>
+          <div className="space-y-4">
+            <input type="text" placeholder="Equipment Name (e.g., Main Walk-in)" value={currentLog.label} onChange={e => setCurrentLog({...currentLog, label: e.target.value})} className="w-full bg-light border border-medium rounded-md p-2 focus:ring-2 focus:ring-black focus:outline-none transition" autoFocus/>
+            <div className="grid grid-cols-2 gap-4">
+              <input type="time" value={currentLog.time} onChange={e => setCurrentLog({...currentLog, time: e.target.value})} className="w-full bg-light border border-medium rounded-md p-2 focus:ring-2 focus:ring-black focus:outline-none transition" />
+              <input type="text" placeholder="Temp (°C)" value={currentLog.temperature} onChange={e => setCurrentLog({...currentLog, temperature: e.target.value})} className={`w-full bg-light border rounded-md p-2 focus:ring-1 focus:outline-none transition ${getTempColorClass(currentLog.temperature || '', currentLog.type)}`} />
+            </div>
+            <input type="text" placeholder="Checked By (Initials)" value={currentLog.checkedBy} onChange={e => setCurrentLog({...currentLog, checkedBy: e.target.value})} className="w-full bg-light border border-medium rounded-md p-2 focus:ring-2 focus:ring-black focus:outline-none transition" />
+            <textarea placeholder="Corrective Action (if any)" value={currentLog.correctiveAction} onChange={e => setCurrentLog({...currentLog, correctiveAction: e.target.value})} className="w-full bg-light border border-medium rounded-md p-2 focus:ring-2 focus:ring-black focus:outline-none transition" rows={2}/>
+          </div>
+          <div className="mt-6 flex justify-between items-center">
+            <div>
+              {!isNew && (
+                <button onClick={() => onDelete(log.id!)} className="text-red-500 hover:text-red-700 font-semibold flex items-center gap-2 px-3 py-2 rounded-md hover:bg-red-50">
+                   <Icon name="delete" className="h-4 w-4" /> Delete
+                </button>
+              )}
+            </div>
+            <div className="flex justify-end gap-3">
+              <button onClick={onClose} className="bg-medium text-dark font-bold py-2 px-4 rounded-md hover:bg-gray-300 transition">Cancel</button>
+              <button onClick={handleSave} className="bg-black text-white font-bold py-2 px-4 rounded-md hover:bg-gray-800 transition">Save</button>
+            </div>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+};
+
+
 const HaccpCossh: React.FC = () => {
     const [query, setQuery] = useState('');
     const [guidance, setGuidance] = useState('');
@@ -95,40 +150,21 @@ const HaccpCossh: React.FC = () => {
     const [isHistoryVisible, setIsHistoryVisible] = useState(false);
     const [activeTab, setActiveTab] = useState('equipment');
     const [recentlyDeletedLog, setRecentlyDeletedLog] = useState<HaccpLog | null>(null);
+    const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+    const [editingLog, setEditingLog] = useState<Partial<HaccpLog> | null>(null);
     
-    // State for weekly calendar view
-    const [currentWeekDate, setCurrentWeekDate] = useState(new Date());
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+    const today = new Date().toISOString().split('T')[0];
 
-    const getWeekDays = (startDate: Date): Date[] => {
-        const start = new Date(startDate);
-        const day = start.getDay();
-        const diff = start.getDate() - day + (day === 0 ? -6 : 1);
-        const firstDay = new Date(start.setDate(diff));
-        return Array.from({ length: 7 }, (_, i) => {
-            const d = new Date(firstDay);
-            d.setDate(firstDay.getDate() + i);
-            return d;
-        });
-    };
-    
-    const weekDays = getWeekDays(currentWeekDate);
-    const weekStart = weekDays[0].toISOString().split('T')[0];
-    const weekEnd = weekDays[6].toISOString().split('T')[0];
-
-    // Fetch HACCP logs for the current week using Apollo Client
-    const { data, loading, refetch } = useQuery(LIST_HACCP_LOGS_QUERY, {
-        variables: { startDate: weekStart, endDate: weekEnd },
+    const { data, loading, refetch } = useQuery<ListHaccpLogsData>(LIST_HACCP_LOGS_QUERY, {
+        variables: { startDate: today, endDate: today },
         notifyOnNetworkStatusChange: true,
     });
-    const haccpLogs: HaccpLog[] = data?.listHaccpLogs || [];
+    const haccpLogs: HaccpLog[] = (data?.listHaccpLogs || []).slice().sort((a, b) => a.time.localeCompare(b.time));
 
-    // Define mutations
     const [createHaccpLog] = useMutation(CREATE_HACCP_LOG_MUTATION);
     const [updateHaccpLog] = useMutation(UPDATE_HACCP_LOG_MUTATION);
     const [deleteHaccpLog] = useMutation(DELETE_HACCP_LOG_MUTATION);
 
-    // Effect to handle the "Undo" timeout
     useEffect(() => {
         if (recentlyDeletedLog) {
             const timerId = window.setTimeout(() => setRecentlyDeletedLog(null), 5000);
@@ -136,37 +172,41 @@ const HaccpCossh: React.FC = () => {
         }
     }, [recentlyDeletedLog]);
 
-    const handlePrevWeek = () => {
-        const newDate = new Date(currentWeekDate);
-        newDate.setDate(currentWeekDate.getDate() - 7);
-        setCurrentWeekDate(newDate);
+    const openAddModal = (type: 'Fridge' | 'Freezer') => {
+        const now = new Date();
+        setEditingLog({
+            type: type,
+            label: '',
+            temperature: '',
+            date: today,
+            time: now.toTimeString().split(' ')[0].substring(0, 5),
+            checkedBy: '',
+            correctiveAction: '',
+        });
+        setIsLogModalOpen(true);
     };
 
-    const handleNextWeek = () => {
-        const newDate = new Date(currentWeekDate);
-        newDate.setDate(currentWeekDate.getDate() + 7);
-        setCurrentWeekDate(newDate);
+    const openEditModal = (log: HaccpLog) => {
+        setEditingLog(log);
+        setIsLogModalOpen(true);
     };
-    
-    const handleAddHaccpLog = async (type: 'Fridge' | 'Freezer', date: string) => {
-        const now = new Date();
-        await createHaccpLog({
-            variables: {
-                type,
-                label: '',
-                temperature: '',
-                date,
-                time: now.toTimeString().split(' ')[0].substring(0, 5),
-                checkedBy: '',
-                correctiveAction: '',
-            },
-            refetchQueries: [{ query: LIST_HACCP_LOGS_QUERY, variables: { startDate: weekStart, endDate: weekEnd } }],
-        });
-    };
-    
-    const handleUpdateHaccpLog = (updatedLog: HaccpLog) => {
-        const { id, label, time, temperature, checkedBy, correctiveAction } = updatedLog;
-        updateHaccpLog({ variables: { id, label, time, temperature, checkedBy, correctiveAction } });
+
+    const handleSaveLog = async (log: Partial<HaccpLog>) => {
+        const { id, ...logData } = log;
+        try {
+            if (id) {
+                await updateHaccpLog({ variables: { id, ...logData } });
+            } else {
+                await createHaccpLog({ variables: logData });
+            }
+            refetch();
+        } catch (e) {
+            console.error("Failed to save log:", e);
+            setError("Could not save log entry.");
+        } finally {
+            setIsLogModalOpen(false);
+            setEditingLog(null);
+        }
     };
     
     const handleDeleteHaccpLog = async (id: string) => {
@@ -175,9 +215,11 @@ const HaccpCossh: React.FC = () => {
             setRecentlyDeletedLog(logToDelete);
             await deleteHaccpLog({ 
                 variables: { id },
-                refetchQueries: [{ query: LIST_HACCP_LOGS_QUERY, variables: { startDate: weekStart, endDate: weekEnd } }],
+                refetchQueries: [{ query: LIST_HACCP_LOGS_QUERY, variables: { startDate: today, endDate: today } }],
             });
         }
+        setIsLogModalOpen(false);
+        setEditingLog(null);
     };
     
     const handleRestoreHaccpLog = async () => {
@@ -185,7 +227,7 @@ const HaccpCossh: React.FC = () => {
             const { id, ...logToRestore } = recentlyDeletedLog;
             await createHaccpLog({
                 variables: logToRestore,
-                refetchQueries: [{ query: LIST_HACCP_LOGS_QUERY, variables: { startDate: weekStart, endDate: weekEnd } }],
+                refetchQueries: [{ query: LIST_HACCP_LOGS_QUERY, variables: { startDate: today, endDate: today } }],
             });
             setRecentlyDeletedLog(null);
         }
@@ -214,8 +256,6 @@ const HaccpCossh: React.FC = () => {
         setError('');
         setAuditReport('');
         try {
-            // NOTE: The audit will run on logs currently loaded in the component.
-            // For a full audit, this would need to fetch all logs from the backend.
             const result = await getSafetyAudit({ foodLogs: [], haccpLogs });
             setAuditReport(result);
         } catch (err) {
@@ -224,95 +264,6 @@ const HaccpCossh: React.FC = () => {
             setIsLoadingAudit(false);
         }
     };
-
-    const handleInputChange = (
-        log: HaccpLog,
-        field: keyof Omit<HaccpLog, 'id' | 'type' | 'date'>,
-        value: string
-    ) => {
-        handleUpdateHaccpLog({ ...log, [field]: value });
-    };
-
-    const getTempColorClass = (tempStr: string, type: 'Fridge' | 'Freezer') => {
-        const temp = parseFloat(tempStr);
-        if (isNaN(temp)) return 'border-medium focus:ring-black';
-        if (type === 'Fridge' && (temp > 8 || temp < 1)) return 'border-red-500 ring-1 ring-red-500 focus:ring-red-500';
-        if (type === 'Freezer' && temp > -18) return 'border-red-500 ring-1 ring-red-500 focus:ring-red-500';
-        return 'border-green-500 focus:ring-green-500';
-    };
-    
-    const selectedDayFridgeLogs = haccpLogs.filter(log => log.type === 'Fridge' && log.date === selectedDate);
-    const selectedDayFreezerLogs = haccpLogs.filter(log => log.type === 'Freezer' && log.date === selectedDate);
-    
-    // Other render functions (renderEditableLogTable, etc.) remain largely the same,
-    // just using the new state and handlers. I will paste the full component for completeness.
-
-    const renderEditableLogTable = (
-        title: string,
-        logType: 'Fridge' | 'Freezer',
-        logs: HaccpLog[]
-    ) => (
-        <div className="space-y-4">
-            <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold text-dark">{title}</h3>
-                <button
-                    onClick={() => handleAddHaccpLog(logType, selectedDate)}
-                    className="bg-black text-white font-bold py-2 px-4 rounded-full hover:bg-gray-800 transition duration-300 flex items-center text-sm"
-                >
-                    <Icon name="add" className="h-5 w-5 mr-2" />
-                    Log Now
-                </button>
-            </div>
-            <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                    <thead className="bg-light text-muted uppercase">
-                        <tr>
-                            <th className="p-3">Label/ID</th>
-                            <th className="p-3">Time</th>
-                            <th className="p-3">Temp (°C)</th>
-                            <th className="p-3">Initials</th>
-                            <th className="p-3">Corrective Action</th>
-                            <th className="p-3 w-12"></th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-medium">
-                        {logs.length > 0 ? logs.map(log => (
-                            <tr key={log.id} className="hover:bg-light">
-                                {(['label', 'time', 'temperature', 'checkedBy', 'correctiveAction'] as const).map(field => (
-                                    <td key={field} className="p-1">
-                                        <input
-                                            type={field === 'time' ? 'time' : 'text'}
-                                            defaultValue={log[field]} // Use defaultValue for uncontrolled-like behavior on each field
-                                            onBlur={(e) => handleInputChange(log, field, e.target.value)}
-                                            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                                            className={`w-full bg-white border rounded-md p-2 focus:ring-1 focus:outline-none transition text-dark ${
-                                                field === 'temperature' ? getTempColorClass(log.temperature, logType) : 'border-medium focus:ring-black'
-                                            }`}
-                                        />
-                                    </td>
-                                ))}
-                                <td className="p-1 text-center">
-                                    <button
-                                        onClick={() => handleDeleteHaccpLog(log.id)}
-                                        className="text-red-500 hover:text-red-700 p-2 rounded-md"
-                                        aria-label="Delete log entry"
-                                    >
-                                        <Icon name="delete" className="h-5 w-5" />
-                                    </button>
-                                </td>
-                            </tr>
-                        )) : (
-                            <tr>
-                                <td colSpan={6} className="text-center p-8 text-muted">
-                                    No {logType} logs for this day.
-                                </td>
-                            </tr>
-                        )}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    );
     
     const renderFoodProbeLogList = () => (
       <div className="space-y-4">
@@ -351,9 +302,7 @@ const HaccpCossh: React.FC = () => {
         </div>
     );
     
-    const formattedSelectedDate = new Date(selectedDate);
-    const tzOffset = formattedSelectedDate.getTimezoneOffset() * 60000;
-    const localDate = new Date(formattedSelectedDate.getTime() + tzOffset);
+    const formattedToday = new Date(today.replace(/-/g, '/')).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
     return (
         <div className="space-y-6">
@@ -362,54 +311,62 @@ const HaccpCossh: React.FC = () => {
                 logs={[]} // Placeholder until food logs are migrated
                 onClose={() => setIsHistoryVisible(false)}
             />
+            {isLogModalOpen && editingLog && (
+              <LogEntryModal 
+                log={editingLog}
+                onClose={() => setIsLogModalOpen(false)}
+                onSave={handleSaveLog}
+                onDelete={handleDeleteHaccpLog}
+              />
+            )}
             
             {renderTabs()}
 
             {activeTab === 'equipment' && (
                 <Card>
-                    <div className="flex items-center justify-between mb-4">
-                        <button onClick={handlePrevWeek} className="p-2 rounded-full hover:bg-light">
-                        <Icon name="chevron-left" className="w-5 h-5 text-muted" />
-                        </button>
-                        <h2 className="font-semibold text-lg text-dark text-center">
-                        Week of {weekDays[0].toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}
-                        </h2>
-                        <button onClick={handleNextWeek} className="p-2 rounded-full hover:bg-light">
-                        <Icon name="chevron-right" className="w-5 h-5 text-muted" />
-                        </button>
-                    </div>
-                    <div className="grid grid-cols-7 gap-2 mb-6">
-                        {weekDays.map(day => {
-                            const dateStr = day.toISOString().split('T')[0];
-                            const isSelected = selectedDate === dateStr;
-                            const hasLogs = haccpLogs.some(log => log.date === dateStr);
-                            return (
-                                <button
-                                key={dateStr}
-                                onClick={() => setSelectedDate(dateStr)}
-                                className={`p-2 text-center rounded-lg transition-colors ${
-                                    isSelected ? 'bg-black text-white' : 'bg-light hover:bg-medium'
-                                }`}
-                                >
-                                <p className="text-xs font-semibold">{day.toLocaleDateString(undefined, { weekday: 'short' })}</p>
-                                <p className="text-lg font-bold">{day.getDate()}</p>
-                                {hasLogs && <div className="mx-auto mt-1 w-2 h-2 bg-primary rounded-full"></div>}
-                                </button>
-                            );
-                        })}
-                    </div>
-
-                    <div className="border-t border-medium pt-4 mt-4">
-                         <h3 className="text-xl font-bold text-dark mb-4">
-                            Logs for {localDate.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
+                        <h3 className="text-xl font-bold text-dark mb-2 sm:mb-0">
+                            Logs for {formattedToday}
                         </h3>
-                        {loading ? <div className="text-center py-8"><Loader /></div> : (
-                            <div className="space-y-6">
-                                {renderEditableLogTable('Fridge Temperature Log', 'Fridge', selectedDayFridgeLogs)}
-                                {renderEditableLogTable('Freezer Temperature Log', 'Freezer', selectedDayFreezerLogs)}
-                            </div>
-                        )}
+                        <div className="flex gap-2">
+                            <button onClick={() => openAddModal('Fridge')} className="bg-blue-500 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-600 transition text-sm flex items-center gap-2">
+                                <Icon name="add" className="h-4 w-4"/> Log Fridge
+                            </button>
+                             <button onClick={() => openAddModal('Freezer')} className="bg-cyan-500 text-white font-bold py-2 px-4 rounded-md hover:bg-cyan-600 transition text-sm flex items-center gap-2">
+                                <Icon name="add" className="h-4 w-4"/> Log Freezer
+                            </button>
+                        </div>
                     </div>
+                    {loading ? (
+                        <div className="text-center py-16"><Loader /></div>
+                    ) : haccpLogs.length > 0 ? (
+                        <div className="space-y-3">
+                            {haccpLogs.map(log => (
+                                <div key={log.id} onClick={() => openEditModal(log)} className="bg-light p-3 rounded-lg border border-medium hover:border-black cursor-pointer transition">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <span className={`font-semibold px-2 py-0.5 rounded-full text-xs ${log.type === 'Fridge' ? 'bg-blue-100 text-blue-800' : 'bg-cyan-100 text-cyan-800'}`}>{log.type}</span>
+                                            <p className="font-bold text-dark mt-1">{log.label}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-xl font-bold text-dark">{log.temperature}°C</p>
+                                            <p className="text-xs text-muted">{log.time} by {log.checkedBy}</p>
+                                        </div>
+                                    </div>
+                                    {log.correctiveAction && (
+                                        <div className="mt-2 pt-2 border-t border-dashed border-yellow-300">
+                                            <p className="text-xs text-yellow-700"><span className="font-semibold">Action:</span> {log.correctiveAction}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-center py-16 text-muted">
+                            <p>No equipment logs recorded for today.</p>
+                            <p className="text-sm">Click a button above to add a new log.</p>
+                        </div>
+                    )}
                 </Card>
             )}
 
