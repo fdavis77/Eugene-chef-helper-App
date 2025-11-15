@@ -52,4 +52,21 @@ export const themes: Record<ThemeName, Theme> = {
       navButtonHoverBg: 'hover:bg-green-800',
     },
   },
+  light: {
+    name: 'Light',
+    classes: {
+      appBg: 'bg-gray-100',
+      headerBg: 'bg-white',
+      cardBg: 'bg-white/50',
+      cardBorder: 'border-gray-200',
+      textAccent: 'text-blue-600',
+      textMuted: 'text-gray-500',
+      buttonBg: 'bg-blue-600',
+      buttonHoverBg: 'hover:bg-blue-700',
+      buttonRing: 'focus:ring-blue-500',
+      buttonFocusRingOffset: 'focus:ring-offset-gray-100',
+      navButtonActiveBg: 'bg-blue-600',
+      navButtonHoverBg: 'hover:bg-gray-200',
+    },
+  },
 };

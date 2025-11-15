@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Icon } from './Icon';
 import type { CalendarDay } from '../../types';
 
@@ -8,9 +8,11 @@ interface CalendarProps {
   events: Record<string, CalendarDay>; // YYYY-MM-DD: event name
   selectedDate: string | null;
   onDateSelect: (date: string) => void;
+  onDropNote: (date: string, noteContent: string) => void;
 }
 
-const Calendar: React.FC<CalendarProps> = ({ currentDate, onSetDate, events, selectedDate, onDateSelect }) => {
+const Calendar: React.FC<CalendarProps> = ({ currentDate, onSetDate, events, selectedDate, onDateSelect, onDropNote }) => {
+  const [draggedOverDate, setDraggedOverDate] = useState<string | null>(null);
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
@@ -21,6 +23,25 @@ const Calendar: React.FC<CalendarProps> = ({ currentDate, onSetDate, events, sel
   const handleNextMonth = () => {
     onSetDate(new Date(year, month + 1, 1));
   };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>, date: string) => {
+    e.preventDefault();
+    setDraggedOverDate(date);
+  };
+
+  const handleDragLeave = () => {
+    setDraggedOverDate(null);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>, date: string) => {
+    e.preventDefault();
+    setDraggedOverDate(null);
+    const noteContent = e.dataTransfer.getData('text/plain');
+    if (noteContent) {
+      onDropNote(date, noteContent);
+    }
+  };
+
 
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -56,18 +77,18 @@ const Calendar: React.FC<CalendarProps> = ({ currentDate, onSetDate, events, sel
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <button onClick={handlePrevMonth} className="p-2 rounded-full hover:bg-gray-700">
-          <Icon name="chevron-left" className="w-5 h-5" />
+        <button onClick={handlePrevMonth} className="p-2 rounded-full hover:bg-light">
+          <Icon name="chevron-left" className="w-5 h-5 text-muted" />
         </button>
-        <h4 className="font-semibold text-lg text-gray-300">
+        <h4 className="font-semibold text-lg text-dark">
           {currentDate.toLocaleString('default', { month: 'long' })} {year}
         </h4>
-        <button onClick={handleNextMonth} className="p-2 rounded-full hover:bg-gray-700">
-          <Icon name="chevron-right" className="w-5 h-5" />
+        <button onClick={handleNextMonth} className="p-2 rounded-full hover:bg-light">
+          <Icon name="chevron-right" className="w-5 h-5 text-muted" />
         </button>
       </div>
 
-      <div className="grid grid-cols-7 gap-1 text-center text-xs text-gray-400 mb-2">
+      <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted mb-2">
         {weekDays.map(day => <div key={day}>{day}</div>)}
       </div>
 
@@ -84,21 +105,24 @@ const Calendar: React.FC<CalendarProps> = ({ currentDate, onSetDate, events, sel
             <div
               key={dateStr}
               onClick={() => onDateSelect(dateStr)}
+              onDragOver={(e) => handleDragOver(e, dateStr)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, dateStr)}
               className={`h-20 p-1.5 border rounded-md cursor-pointer transition-colors duration-200 flex flex-col ${
-                isSelected ? 'bg-blue-500/50 border-blue-400' : 
-                isToday ? 'bg-gray-700/50 border-gray-600' : 'border-gray-700 hover:bg-gray-700/50'
-              }`}
+                isSelected ? 'bg-black border-black text-white' : 
+                isToday ? 'bg-medium border-gray-300' : 'border-medium hover:bg-light'
+              } ${draggedOverDate === dateStr ? 'ring-2 ring-primary ring-inset' : ''}`}
             >
-              <span className={`font-medium ${isToday ? 'text-blue-400' : 'text-gray-300'}`}>{day}</span>
+              <span className={`font-medium ${isToday && !isSelected ? 'text-primary' : ''}`}>{day}</span>
               {dayData?.menuItem && (
-                <div className="mt-1 text-xs bg-blue-500/80 text-white p-1 rounded-md truncate">
+                <div className={`mt-1 text-xs p-1 rounded-md truncate ${isSelected ? 'bg-white/20 text-white' : 'bg-primary text-white'}`}>
                   {dayData.menuItem}
                 </div>
               )}
               {(dayData?.rota?.length ?? 0) > 0 && (
-                <div className="text-xs text-gray-400 flex items-center gap-1 mt-auto">
+                <div className={`flex items-center gap-1 mt-auto text-xs ${isSelected ? 'text-white/80' : 'text-muted'}`}>
                     <Icon name="users" className="h-3 w-3" />
-                    <span>{dayData!.rota!.length} Staff</span>
+                    <span>{dayData!.rota!.length}</span>
                 </div>
               )}
             </div>

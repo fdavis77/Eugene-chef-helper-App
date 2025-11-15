@@ -1,9 +1,9 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import type { Ingredient, Recipe } from '../types';
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// fix: Imported HaccpLog and TemperatureLog types.
+import type { Ingredient, Recipe, SeasonalProduce, HaccpLog, TemperatureLog } from '../types';
 
 export const getMenuInspiration = async (prompt: string, unitSystem: 'metric' | 'imperial'): Promise<Recipe> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const fullPrompt = `You are a world-class chef creating an innovative menu. Based on the following concept, provide a detailed recipe. The user has requested ingredient measurements in ${unitSystem === 'imperial' ? 'USA (imperial, e.g., cups, oz, lbs)' : 'UK/EU (metric, e.g., grams, ml, kg)'} units. Concept: "${prompt}"`;
   
   const response = await ai.models.generateContent({
@@ -45,6 +45,7 @@ export const getMenuInspiration = async (prompt: string, unitSystem: 'metric' | 
 };
 
 export const getIngredientList = async (recipe: string): Promise<Ingredient[]> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
         model: "gemini-2.5-flash",
         contents: `Analyze the following recipe and extract the ingredients into a structured list. Recipe:\n\n${recipe}`,
@@ -84,6 +85,7 @@ export const getIngredientList = async (recipe: string): Promise<Ingredient[]> =
 };
 
 export const getHaccpInfo = async (query: string): Promise<string> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: query,
@@ -94,15 +96,80 @@ export const getHaccpInfo = async (query: string): Promise<string> => {
     return response.text;
 };
 
-export const getSeasonalProduce = async (season: string): Promise<string> => {
+// fix: Added and exported getSafetyAudit function.
+export const getSafetyAudit = async ({ foodLogs, haccpLogs }: { foodLogs: TemperatureLog[]; haccpLogs: HaccpLog[] }): Promise<string> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const logsData = `
+    FOOD PROBE LOGS:
+    ${foodLogs.length > 0 ? JSON.stringify(foodLogs.slice(-20), null, 2) : 'No recent food probe logs recorded.'}
+
+    FRIDGE/FREEZER HACCP LOGS:
+    ${haccpLogs.length > 0 ? JSON.stringify(haccpLogs.slice(-20), null, 2) : 'No recent fridge/freezer logs recorded.'}
+  `;
+    const prompt = `As a meticulous food safety auditor, analyze the following recent temperature logs from a professional kitchen. 
+    - Identify any readings that are outside of safe temperature zones (Fridges should be at or below 4°C/40°F; Freezers at or below -18°C/0°F; Hot food should be held above 63°C/145°F).
+    - Look for patterns, like a specific fridge consistently running warm.
+    - Check for missing logs or incomplete data (e.g., missing initials, no corrective action for a high temperature).
+    - Provide a concise report in Markdown format with clear headings for "Key Findings" and "Recommendations".
+    - If there are no issues, state that the logs appear to be in compliance.
+
+    Log Data:
+    ${logsData}
+    `;
+
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: `Create a list of prime seasonal produce for a chef for the season of ${season}. Categorize the list into Fruits, Vegetables, and Proteins. Be comprehensive and include some unique or interesting options alongside the classics. Format the response cleanly.`,
+        contents: prompt,
+        config: {
+            systemInstruction: "You are a food safety expert specializing in HACCP compliance for professional kitchens. Your analysis must be sharp, accurate, and focused on preventing health risks. Format your response clearly using Markdown for headings and bullet points.",
+        },
     });
+
     return response.text;
 };
 
+export const getSeasonalProduce = async (month: string, region: string): Promise<SeasonalProduce> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Create a list of prime seasonal produce for a chef for the month of ${month} in the region of ${region}. Include some unique or interesting options alongside the classics.`,
+        config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    Fruits: {
+                        type: Type.ARRAY,
+                        description: "A list of seasonal fruits.",
+                        items: { type: Type.STRING }
+                    },
+                    Vegetables: {
+                        type: Type.ARRAY,
+                        description: "A list of seasonal vegetables.",
+                        items: { type: Type.STRING }
+                    },
+                    Proteins: {
+                        type: Type.ARRAY,
+                        description: "A list of seasonal proteins (fish, meat, game).",
+                        items: { type: Type.STRING }
+                    }
+                },
+                required: ["Fruits", "Vegetables", "Proteins"]
+            }
+        }
+    });
+    
+    try {
+        const jsonString = response.text.trim();
+        return JSON.parse(jsonString) as SeasonalProduce;
+    } catch (e) {
+        console.error("Failed to parse seasonal produce JSON:", e);
+        throw new Error("Could not parse seasonal produce from AI response.");
+    }
+};
+
 export const analyzeImage = async (prompt: string, imageBase64: string, mimeType: string): Promise<string> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const imagePart = {
     inlineData: {
       data: imageBase64,

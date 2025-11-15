@@ -1,24 +1,50 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
+    <meta charset="UTF-T" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Chef's Omni-Tool</title>
+    <title>Eugene AI Chef</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+            colors: {
+              primary: '#06C167', // Uber Green
+              'primary-dark': '#05A559',
+              light: '#F6F6F6', // Light gray for inputs/backgrounds
+              medium: '#EEEEEE',
+              dark: '#1A1A1A',
+              black: '#000000',
+              muted: '#6B6B6B',
+            }
+          }
+        }
+      }
+    </script>
   <script type="importmap">
 {
   "imports": {
     "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
     "react/": "https://aistudiocdn.com/react@^19.2.0/",
     "react": "https://aistudiocdn.com/react@^19.2.0",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.1"
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.1",
+    "lottie-web": "https://aistudiocdn.com/lottie-web@^5.13.0",
+    "@apollo/client": "https://aistudiocdn.com/@apollo/client@^3.8.0"
   }
 }
 </script>
 </head>
-  <body>
-    <div id="root"></div>
+  <body class="bg-white">
+    <div id="root" class="font-sans"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>

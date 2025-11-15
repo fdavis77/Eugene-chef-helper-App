@@ -1,8 +1,29 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { gql, useMutation } from '@apollo/client';
 import { analyzeImage } from '../services/geminiService';
 import { Card } from './common/Card';
 import { Loader } from './common/Loader';
 import { Icon } from './common/Icon';
+import { MarkdownRenderer } from './common/MarkdownRenderer';
+
+const CREATE_NOTE_MUTATION = gql`
+  mutation CreateNote($content: String!, $imageUrl: String) {
+    createNote(content: $content, imageUrl: $imageUrl) {
+      id
+    }
+  }
+`;
+
+const LIST_NOTES_QUERY = gql`
+  query ListNotes {
+    listNotes {
+      id
+      content
+      createdAt
+      imageUrl
+    }
+  }
+`;
 
 const SousChefVision: React.FC = () => {
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -12,11 +33,16 @@ const SousChefVision: React.FC = () => {
   const [isLoading, setIsLoading] = useState<false | 'prompt' | 'macro'>(false);
   const [error, setError] = useState<string>('');
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [noteSaved, setNoteSaved] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+
+  const [createNote] = useMutation(CREATE_NOTE_MUTATION, {
+    refetchQueries: [{ query: LIST_NOTES_QUERY }],
+  });
 
   useEffect(() => {
     if (isCameraOpen) {
@@ -82,6 +108,7 @@ const SousChefVision: React.FC = () => {
     }
     setError('');
     setAnalysis('');
+    setNoteSaved(false);
     setIsLoading('prompt');
 
     try {
@@ -103,14 +130,14 @@ const SousChefVision: React.FC = () => {
     }
     setError('');
     setAnalysis('');
+    setNoteSaved(false);
     setIsLoading('macro');
 
     try {
       const imageBase64 = await toBase64(imageFile);
-      const macroPrompt = "Analyze the food in this image. Identify all visible ingredients and provide a rough estimate of the total calories for the dish shown. Format the response with a list of ingredients and a clear calorie count.";
+      const macroPrompt = "Analyze the food in this image. Identify all visible ingredients and provide a rough estimate of the total calories for the dish shown. Format the response with headings for 'Ingredients' and 'Calorie Estimate'. **Crucially, list each ingredient and make its name bold using markdown (e.g., **Flour**, **Sugar**).** Do not use any markdown hashtags.";
       const result = await analyzeImage(macroPrompt, imageBase64, imageFile.type);
       setAnalysis(result);
-    // fix: The catch block was missing braces, which caused a syntax error and subsequent scope issues.
     } catch (err) {
       setError('Failed to get macro analysis. Please try again.');
       console.error(err);
@@ -147,36 +174,58 @@ const SousChefVision: React.FC = () => {
         }
     }
   };
+  
+  const handleSaveToNotes = async () => {
+    if (!analysis || !imageFile) return;
 
-  // fix: The component was missing its return statement and JSX content.
+    const reader = new FileReader();
+    reader.readAsDataURL(imageFile);
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      try {
+        await createNote({ variables: { content: analysis, imageUrl: dataUrl } });
+        setNoteSaved(true);
+        setTimeout(() => setNoteSaved(false), 2000);
+      } catch (err) {
+        console.error("Error saving note to backend:", err);
+        setError("Could not save note.");
+      }
+    };
+    reader.onerror = (error) => {
+      console.error("Error converting image to data URL for notes:", error);
+      setError("Could not save image to notes.");
+    };
+  };
+
+
   return (
     <div className="space-y-6">
       <Card>
-        <h2 className="text-xl font-semibold text-blue-400 mb-4 flex items-center">
+        <h2 className="text-xl font-bold text-dark mb-4 flex items-center">
             <Icon name="visibility" className="h-6 w-6 mr-2" />
             Sous-Chef Vision
         </h2>
-        <p className="text-gray-400 mb-4">Upload an image or use your camera to identify ingredients, get calorie estimates, or ask your own questions for instant analysis.</p>
+        <p className="text-muted mb-4">Upload an image or use your camera to identify ingredients, get calorie estimates, or ask your own questions for instant analysis.</p>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="flex flex-col items-center justify-center bg-gray-800 border-2 border-dashed border-gray-600 rounded-lg p-6 text-center h-full min-h-[250px]">
+            <div className="flex flex-col items-center justify-center bg-light border-2 border-dashed border-medium rounded-lg p-6 text-center h-full min-h-[250px]">
                 {imageUrl ? (
                     <div className="relative w-full h-full flex items-center justify-center">
                         <img src={imageUrl} alt="Preview" className="max-h-64 w-auto object-contain rounded-md mx-auto"/>
-                        <button onClick={handleRemoveImage} className="absolute top-2 right-2 bg-red-600/80 hover:bg-red-600 text-white rounded-md p-1.5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-red-500">
+                        <button onClick={handleRemoveImage} className="absolute top-2 right-2 bg-red-600/80 hover:bg-red-600 text-white rounded-md p-1.5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-light focus:ring-red-500">
                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                     </div>
                 ) : (
                     <div>
-                        <Icon name="image" className="mx-auto h-12 w-12 text-gray-500" />
-                        <p className="mt-2 text-gray-400">Drag & drop or</p>
+                        <Icon name="image" className="mx-auto h-12 w-12 text-gray-400" />
+                        <p className="mt-2 text-muted">Drag & drop or</p>
                          <div className="mt-2 flex justify-center gap-4">
-                            <button onClick={() => fileInputRef.current?.click()} className="text-blue-400 hover:underline font-semibold">
+                            <button onClick={() => fileInputRef.current?.click()} className="text-primary hover:underline font-semibold">
                                 upload an image
                             </button>
-                            <span className="text-gray-600">|</span>
-                            <button onClick={openCamera} className="text-blue-400 hover:underline font-semibold flex items-center gap-2">
+                            <span className="text-gray-400">|</span>
+                            <button onClick={openCamera} className="text-primary hover:underline font-semibold flex items-center gap-2">
                                 <Icon name="camera" className="h-4 w-4" /> Use Camera
                             </button>
                         </div>
@@ -188,7 +237,7 @@ const SousChefVision: React.FC = () => {
                             className="hidden"
                             aria-label="Upload image"
                         />
-                        <p className="text-xs text-gray-500 mt-2">PNG, JPG, WEBP up to 4MB</p>
+                        <p className="text-xs text-muted mt-2">PNG, JPG, WEBP up to 4MB</p>
                     </div>
                 )}
             </div>
@@ -198,7 +247,7 @@ const SousChefVision: React.FC = () => {
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder="e.g., Identify potential allergens in this dish, or suggest a wine pairing."
-                    className="flex-grow bg-gray-800 border border-gray-600 rounded-md p-3 focus:ring-2 focus:ring-blue-500 focus:outline-none transition resize-none"
+                    className="flex-grow bg-light border-medium text-dark placeholder:text-muted focus:ring-black border rounded-md p-3 focus:ring-2 focus:outline-none transition resize-none"
                     rows={6}
                     aria-label="Prompt for image analysis"
                 />
@@ -206,7 +255,7 @@ const SousChefVision: React.FC = () => {
                     <button
                         onClick={handleAnalyze}
                         disabled={!!isLoading || !imageFile || !prompt.trim()}
-                        className="w-full bg-blue-500 text-white font-bold py-3 px-6 rounded-md hover:bg-blue-600 transition duration-300 disabled:bg-gray-500 flex items-center justify-center"
+                        className="w-full bg-black text-white font-bold py-3 px-6 rounded-md hover:bg-gray-800 transition duration-300 disabled:bg-gray-500 flex items-center justify-center"
                         aria-label="Analyze Image with custom prompt"
                     >
                         {isLoading === 'prompt' ? <Loader /> : 'Analyze with Prompt'}
@@ -228,19 +277,42 @@ const SousChefVision: React.FC = () => {
                 </div>
             </div>
         </div>
-        {error && <p className="text-red-400 mt-4">{error}</p>}
+        {error && <p className="text-red-500 mt-4">{error}</p>}
       </Card>
       
       {(isLoading || analysis) && (
         <Card>
-            <h3 className="text-lg font-semibold text-blue-400 mb-4">Analysis Result</h3>
+            <h3 className="text-lg font-semibold text-dark mb-4">Analysis Result</h3>
             {isLoading ? (
                 <div className="flex flex-col items-center justify-center p-8">
                     <Loader />
-                    <p className="mt-4 text-gray-400">Analyzing image...</p>
+                    <p className="mt-4 text-muted">Analyzing image...</p>
                 </div>
             ) : (
-                analysis && <pre className="whitespace-pre-wrap font-sans bg-gray-800 p-4 rounded-md text-gray-300">{analysis}</pre>
+                analysis && (
+                    <div>
+                        <MarkdownRenderer content={analysis} />
+                        <div className="flex justify-end mt-4">
+                            <button
+                                onClick={handleSaveToNotes}
+                                disabled={noteSaved}
+                                className="bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700 transition duration-300 disabled:bg-green-800/50 disabled:cursor-not-allowed flex items-center justify-center"
+                            >
+                                {noteSaved ? (
+                                    <>
+                                        <Icon name="check" className="h-5 w-5 mr-2" />
+                                        Saved!
+                                    </>
+                                ) : (
+                                    <>
+                                        <Icon name="save" className="h-5 w-5 mr-2" />
+                                        Save to Notes
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                )
             )}
         </Card>
       )}
@@ -252,14 +324,14 @@ const SousChefVision: React.FC = () => {
             <div className="mt-6 flex gap-4">
                 <button 
                     onClick={handleCapture} 
-                    className="bg-blue-500 text-white font-bold py-3 px-6 rounded-md hover:bg-blue-600 transition duration-300 flex items-center gap-2"
+                    className="bg-black text-white font-bold py-3 px-6 rounded-md hover:bg-gray-800 transition duration-300 flex items-center gap-2"
                 >
                     <Icon name="camera" className="h-6 w-6"/>
                     Capture
                 </button>
                 <button 
                     onClick={() => setIsCameraOpen(false)} 
-                    className="bg-gray-700 text-gray-300 font-bold py-3 px-6 rounded-md hover:bg-gray-600 transition duration-300"
+                    className="bg-medium text-dark font-bold py-3 px-6 rounded-md hover:bg-gray-300 transition duration-300"
                 >
                     Close
                 </button>

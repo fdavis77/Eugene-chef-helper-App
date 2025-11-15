@@ -10,21 +10,18 @@ interface TemperatureLogHistoryProps {
 }
 
 type FilterType = 'All' | 'Food' | 'Fridge' | 'Freezer';
-const filterTypes: FilterType[] = ['All', 'Food', 'Fridge', 'Freezer'];
 
 const TemperatureLogHistory: React.FC<TemperatureLogHistoryProps> = ({ isVisible, logs, onClose }) => {
-  const [filterType, setFilterType] = useState<FilterType>('All');
   const [filterDate, setFilterDate] = useState<string>('');
 
   const filteredLogs = useMemo(() => {
     return [...logs]
       .reverse()
       .filter(log => {
-        const typeMatch = filterType === 'All' || log.type === filterType;
         const dateMatch = !filterDate || log.timestamp.startsWith(filterDate);
-        return typeMatch && dateMatch;
+        return dateMatch;
       });
-  }, [logs, filterType, filterDate]);
+  }, [logs, filterDate]);
 
   if (!isVisible) return null;
 
@@ -41,7 +38,7 @@ const TemperatureLogHistory: React.FC<TemperatureLogHistoryProps> = ({ isVisible
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold text-blue-400 flex items-center">
               <Icon name="history" className="h-6 w-6 mr-2" />
-              Temperature Log History
+              Food Probe Log History
             </h2>
             <button
               onClick={onClose}
@@ -62,23 +59,6 @@ const TemperatureLogHistory: React.FC<TemperatureLogHistoryProps> = ({ isVisible
                     onChange={e => setFilterDate(e.target.value)}
                     className="w-full bg-gray-900 border border-gray-600 rounded-md p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none transition"
                 />
-            </div>
-            <div className="flex-grow">
-                 <label className="text-sm font-medium text-gray-400 mb-1 block">Filter by Type</label>
-                 <div className="inline-flex rounded-md shadow-sm bg-gray-900/50 p-1 w-full" role="group">
-                    {filterTypes.map(type => (
-                        <button
-                            key={type}
-                            type="button"
-                            onClick={() => setFilterType(type)}
-                            className={`px-4 py-2 text-sm font-medium transition-colors duration-200 focus:z-10 focus:ring-2 focus:ring-blue-500 w-full first:rounded-l-md last:rounded-r-md ${
-                                filterType === type ? "bg-blue-500 text-white" : 'text-gray-300 hover:bg-gray-700'
-                            }`}
-                        >
-                            {type}
-                        </button>
-                    ))}
-                </div>
             </div>
           </div>
           

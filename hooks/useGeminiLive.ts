@@ -1,20 +1,21 @@
 import { useState, useRef, useCallback } from 'react';
-// fix: Removed import for LiveSession as it is not an exported member.
 import { GoogleGenAI, LiveServerMessage, Modality, Type, FunctionDeclaration, Blob } from '@google/genai';
 import { encode, decode, decodeAudioData } from '../utils/audio';
-import type { ChatMessage, TemperatureLog, CalendarDay } from '../types';
+import type { ChatMessage, CalendarDay, HaccpLog } from '../types';
 
 interface GeminiLiveHookProps {
-  onTemperatureLog: (logData: Omit<TemperatureLog, 'id' | 'timestamp'>) => void;
+  onAddHaccpLog: (logData: Omit<HaccpLog, 'id' | 'date' | 'time' | 'checkedBy' | 'correctiveAction'>) => Promise<void>;
   onTranscriptUpdate: (message: ChatMessage) => void;
-  onAddNote: (note: string) => void;
+  onAddNote: (note: string, imageUrl?: string) => Promise<void>;
   getPlannedItems: () => Record<string, CalendarDay>;
   onUpdateCalendar: (date: string, data: CalendarDay) => void;
+  onKeyError: () => void;
 }
 
 interface GeminiLiveHook {
   isSessionActive: boolean;
   isConnecting: boolean;
+  isBotSpeaking: boolean;
   error: string | null;
   startConversation: () => void;
   stopConversation: () => void;
@@ -32,11 +33,11 @@ const recordTemperatureFunctionDeclaration: FunctionDeclaration = {
       },
       item: {
         type: Type.STRING,
-        description: 'The name of the food item or appliance.',
+        description: 'The name of the food item or appliance (e.g., "Main Walk-in", "Chicken Breast").',
       },
       temperature: {
         type: Type.STRING,
-        description: 'The temperature reading, including units (e.g., "75°C", "-18°F").',
+        description: 'The temperature reading, including units (e.g., "75°C", "-18°F", "2 degrees").',
       },
     },
     required: ['type', 'item', 'temperature'],
@@ -129,7 +130,6 @@ const parseDate = (dateString: string): string => {
         }
     }
    
-    // Fallback for YYYY-MM-DD or other parsable formats
     const parsed = new Date(dateString);
     if (!isNaN(parsed.getTime())) {
         return parsed.toISOString().split('T')[0];
@@ -138,12 +138,12 @@ const parseDate = (dateString: string): string => {
     return today.toISOString().split('T')[0];
 };
 
-export const useGeminiLive = ({ onTemperatureLog, onTranscriptUpdate, onAddNote, getPlannedItems, onUpdateCalendar }: GeminiLiveHookProps): GeminiLiveHook => {
+export const useGeminiLive = ({ onAddHaccpLog, onTranscriptUpdate, onAddNote, getPlannedItems, onUpdateCalendar, onKeyError }: GeminiLiveHookProps): GeminiLiveHook => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSessionActive, setIsSessionActive] = useState(false);
+  const [isBotSpeaking, setIsBotSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
-  // fix: Replaced non-exported 'LiveSession' with 'any' for the session promise ref.
   const sessionRef = useRef<Promise<any> | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -182,6 +182,7 @@ export const useGeminiLive = ({ onTemperatureLog, onTranscriptUpdate, onAddNote,
 
     setIsSessionActive(false);
     setIsConnecting(false);
+    setIsBotSpeaking(false);
   }, []);
 
 
@@ -227,13 +228,11 @@ export const useGeminiLive = ({ onTemperatureLog, onTranscriptUpdate, onAddNote,
             scriptProcessor.connect(inputAudioContext.destination);
           },
           onmessage: async (message: LiveServerMessage) => {
-             // Handle Function Calling
             if (message.toolCall) {
               for (const fc of message.toolCall.functionCalls) {
                  const sendResponse = (result: string) => {
                     sessionPromise.then((session) => {
                         session.sendToolResponse({
-                          // fix: The `functionResponses` property must be an array.
                           functionResponses: [{
                             id : fc.id,
                             name: fc.name,
@@ -244,10 +243,14 @@ export const useGeminiLive = ({ onTemperatureLog, onTranscriptUpdate, onAddNote,
                 };
 
                 if (fc.name === 'recordTemperature') {
-                   onTemperatureLog(fc.args as Omit<TemperatureLog, 'id' | 'timestamp'>);
+                   const { type, item, temperature } = fc.args as { type: string, item: string, temperature: string };
+                   if (type === 'Fridge' || type === 'Freezer') {
+                        await onAddHaccpLog({ type, label: item, temperature });
+                   }
                    sendResponse("OK, logged.");
+
                 } else if (fc.name === 'addNote') {
-                    onAddNote(fc.args.noteContent as string);
+                    await onAddNote(fc.args.noteContent as string);
                     sendResponse("OK, note saved.");
                 } else if (fc.name === 'addMenuItemToCalendar') {
                     const { date, menuItem } = fc.args;
@@ -268,9 +271,9 @@ export const useGeminiLive = ({ onTemperatureLog, onTranscriptUpdate, onAddNote,
               }
             }
 
-            // Handle Audio
             const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
             if (base64Audio && outputAudioContextRef.current) {
+                setIsBotSpeaking(true);
                 nextStartTime = Math.max(nextStartTime, outputAudioContextRef.current.currentTime);
                 const audioBuffer = await decodeAudioData(decode(base64Audio), outputAudioContextRef.current, 24000, 1);
                 const source = outputAudioContextRef.current.createBufferSource();
@@ -282,7 +285,6 @@ export const useGeminiLive = ({ onTemperatureLog, onTranscriptUpdate, onAddNote,
                 audioSourcesRef.current.add(source);
             }
 
-             // Handle Transcription
             if (message.serverContent?.outputTranscription) {
               currentOutputTranscription += message.serverContent.outputTranscription.text;
             }
@@ -299,8 +301,15 @@ export const useGeminiLive = ({ onTemperatureLog, onTranscriptUpdate, onAddNote,
                 if (botOutput) {
                   onTranscriptUpdate({ role: 'bot', content: botOutput });
                 }
+                
+                if (userInput && botOutput) {
+                    const fullConversation = `(Voice)\n\n**Me:** ${userInput}\n\n**Eugene:** ${botOutput}`;
+                    await onAddNote(fullConversation);
+                }
+
                 currentInputTranscription = '';
                 currentOutputTranscription = '';
+                setIsBotSpeaking(false);
             }
 
             if (message.serverContent?.interrupted) {
@@ -311,7 +320,12 @@ export const useGeminiLive = ({ onTemperatureLog, onTranscriptUpdate, onAddNote,
           },
           onerror: (e: ErrorEvent) => {
             console.error('Live session error:', e);
-            setError('An error occurred during the conversation.');
+            if (e.message.includes('Network error') || e.message.includes('Requested entity was not found')) {
+                setError('A key selection is required for voice conversations. Please select your API key and try again.');
+                onKeyError();
+            } else {
+                setError('An error occurred during the conversation.');
+            }
             stopConversation();
           },
           onclose: () => {
@@ -321,12 +335,12 @@ export const useGeminiLive = ({ onTemperatureLog, onTranscriptUpdate, onAddNote,
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Puck' } },
           },
           inputAudioTranscription: {},
           outputAudioTranscription: {},
           tools: [{ functionDeclarations: [recordTemperatureFunctionDeclaration, addNoteFunctionDeclaration, addMenuItemToCalendarFunctionDeclaration, addRotaEntryToCalendarFunctionDeclaration] }],
-          systemInstruction: 'You are Chef Bot, a concise and helpful AI assistant for a professional chef. When asked to record a temperature, use the recordTemperature tool. When asked to save a note or idea, use the addNote tool. You can also manage the menu and rota planner. Use addMenuItemToCalendar to schedule a dish for a specific day. Use addRotaEntryToCalendar to add a staff member to the rota for a day. For other questions, provide a direct and helpful spoken answer.',
+          systemInstruction: 'You are Chef Bot, a concise and helpful AI assistant for a professional chef. When asked to record a temperature, use the recordTemperature tool. When logging for a fridge or freezer, ensure the type is "Fridge" or "Freezer" and the item is the specific name of the appliance, e.g., "Main Walk-in". When asked to save a note or idea, use the addNote tool. You can also manage the menu and rota planner. Use addMenuItemToCalendar to schedule a dish for a specific day. Use addRotaEntryToCalendar to add a staff member to the rota for a day. For other questions, provide a direct and helpful spoken answer.',
         },
       });
       sessionRef.current = sessionPromise;
@@ -336,7 +350,7 @@ export const useGeminiLive = ({ onTemperatureLog, onTranscriptUpdate, onAddNote,
       setError('Could not access microphone. Please grant permission and try again.');
       setIsConnecting(false);
     }
-  }, [onTemperatureLog, onTranscriptUpdate, onAddNote, getPlannedItems, onUpdateCalendar, stopConversation]);
+  }, [onAddHaccpLog, onTranscriptUpdate, onAddNote, getPlannedItems, onUpdateCalendar, stopConversation, onKeyError]);
 
   const createBlob = (data: Float32Array): Blob => {
     const l = data.length;
@@ -350,5 +364,5 @@ export const useGeminiLive = ({ onTemperatureLog, onTranscriptUpdate, onAddNote,
     };
   }
 
-  return { isSessionActive, isConnecting, error, startConversation, stopConversation };
+  return { isSessionActive, isConnecting, isBotSpeaking, error, startConversation, stopConversation };
 };

@@ -13,7 +13,8 @@ export interface TemperatureLog {
 }
 
 export interface HaccpLog {
-  id: number;
+  id: string; // Changed to string to match GraphQL ID type
+  type: 'Fridge' | 'Freezer';
   label: string;
   date: string;
   time: string;
@@ -41,11 +42,30 @@ export interface Recipe {
 export interface CalendarDay {
   menuItem?: string;
   rota?: string[];
+  orderingList?: Ingredient[];
 }
 
+export interface Note {
+  id: string;
+  content: string;
+  createdAt: string;
+  imageUrl?: string;
+}
 
-// fix: Added Theme and ThemeName types that were missing.
-export type ThemeName = 'twilight' | 'crimson' | 'evergreen';
+export type CalendarView = 'Month' | 'Agenda';
+
+export interface SeasonalProduce {
+  Fruits: string[];
+  Vegetables: string[];
+  Proteins: string[];
+}
+
+export type AnalysisMode = 'Custom' | 'Macro' | 'Technique' | 'Variation';
+
+export type EmailClient = 'default' | 'gmail' | 'outlook';
+
+// Fix: Added ThemeName and Theme types for theme context.
+export type ThemeName = 'twilight' | 'crimson' | 'evergreen' | 'light';
 
 export interface Theme {
   name: string;
