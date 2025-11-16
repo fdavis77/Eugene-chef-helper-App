@@ -75,6 +75,7 @@ const VerifyCode: React.FC<VerifyCodeProps> = ({ phoneNumber, onContinue, onBack
         {code.map((digit, index) => (
           <input
             key={index}
+            // Fix: Changed arrow function to block body to ensure void return type for ref callback.
             ref={el => { inputsRef.current[index] = el; }}
             type="tel"
             maxLength={1}
@@ -82,7 +83,7 @@ const VerifyCode: React.FC<VerifyCodeProps> = ({ phoneNumber, onContinue, onBack
             onChange={e => handleChange(e, index)}
             onKeyDown={e => handleKeyDown(e, index)}
             onPaste={index === 0 ? handlePaste : undefined}
-            className="w-14 h-16 bg-light rounded-lg text-center text-2xl font-bold text-dark focus:outline-none focus:ring-2 focus:ring-black"
+            className="w-14 h-16 bg-light rounded-lg text-center text-2xl font-bold focus:outline-none focus:ring-2 focus:ring-black"
           />
         ))}
       </div>

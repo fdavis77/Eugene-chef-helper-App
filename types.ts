@@ -13,7 +13,7 @@ export interface TemperatureLog {
 }
 
 export interface HaccpLog {
-  id: string; // Changed to string to match GraphQL ID type
+  id: number;
   type: 'Fridge' | 'Freezer';
   label: string;
   date: string;

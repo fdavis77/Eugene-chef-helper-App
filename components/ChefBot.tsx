@@ -1,68 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI, Chat } from '@google/genai';
-// fix: Import useQuery and useMutation from '@apollo/client/react' to resolve module export issue.
-import { gql } from '@apollo/client';
-import { useQuery, useMutation } from '@apollo/client/react';
 import { useGeminiLive } from '../hooks/useGeminiLive';
 import { Card } from './common/Card';
 import { Icon } from './common/Icon';
 import { Loader } from './common/Loader';
-import type { ChatMessage, CalendarDay, HaccpLog } from '../types';
+import AnimatedAvatar from './AnimatedAvatar';
+import type { ChatMessage, TemperatureLog, CalendarDay, HaccpLog } from '../types';
 
 interface ChefBotProps {
+  notesCount: number;
   plannedItemsCount: number;
+  onAddFoodLog: (logData: Omit<TemperatureLog, 'id' | 'timestamp'>) => void;
+  onAddHaccpLog: (logData: Omit<HaccpLog, 'id' | 'date' | 'time' | 'checkedBy' | 'correctiveAction'>) => void;
+  onAddNote: (note: string, imageUrl?: string) => void;
   plannedItems: Record<string, CalendarDay>;
   onUpdateCalendar: (date: string, data: CalendarDay) => void;
-}
-
-const LIST_NOTES_QUERY = gql`
-  query ListNotes {
-    listNotes {
-      id
-    }
-  }
-`;
-
-const CREATE_NOTE_MUTATION = gql`
-  mutation CreateNote($content: String!, $imageUrl: String) {
-    createNote(content: $content, imageUrl: $imageUrl) {
-      id
-      content
-      createdAt
-      imageUrl
-    }
-  }
-`;
-
-const CREATE_HACCP_LOG_MUTATION = gql`
-  mutation CreateHaccpLog(
-    $type: String!
-    $label: String!
-    $date: Date!
-    $time: Time!
-    $temperature: String!
-  ) {
-    createHaccpLog(
-      type: $type
-      label: $label
-      date: $date
-      time: $time
-      temperature: $temperature
-    ) {
-      id
-    }
-  }
-`;
-
-// fix: Add interface for the GraphQL query result to provide strong typing.
-interface ListNotesData {
-  listNotes: { id: string }[];
 }
 
 type AvatarState = 'idle' | 'listening' | 'thinking' | 'speaking';
 
 const ChefBot: React.FC<ChefBotProps> = ({
+  notesCount,
   plannedItemsCount,
+  onAddFoodLog,
+  onAddHaccpLog,
+  onAddNote,
   plannedItems,
   onUpdateCalendar
 }) => {
@@ -75,19 +37,16 @@ const ChefBot: React.FC<ChefBotProps> = ({
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<Chat | null>(null);
-  
-  // Data fetching and mutations
-  // fix: Provide the ListNotesData type to useQuery for type safety.
-  const { data: notesData } = useQuery<ListNotesData>(LIST_NOTES_QUERY);
-  const notesCount = notesData?.listNotes?.length ?? 0;
 
-  const [createNote] = useMutation(CREATE_NOTE_MUTATION, {
-    refetchQueries: [{ query: LIST_NOTES_QUERY }],
-  });
-  const [createHaccpLog] = useMutation(CREATE_HACCP_LOG_MUTATION);
-
-  // Effect to check for an existing API key on mount.
   useEffect(() => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    chatRef.current = ai.chats.create({
+      model: 'gemini-2.5-flash',
+      config: {
+        systemInstruction: 'You are Eugene AI Chef, a concise and helpful AI assistant for a professional chef. Provide direct and helpful answers.',
+      },
+    });
+
     const checkKey = async () => {
         if (window.aistudio && await window.aistudio.hasSelectedApiKey()) {
             setIsKeySelected(true);
@@ -97,37 +56,9 @@ const ChefBot: React.FC<ChefBotProps> = ({
     checkKey();
   }, []);
 
-  useEffect(() => {
-    if (isKeySelected) {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      chatRef.current = ai.chats.create({
-        model: 'gemini-2.5-flash',
-        config: {
-          systemInstruction: 'You are Eugene AI Chef, a concise and helpful AI assistant for a professional chef. Provide direct and helpful answers.',
-        },
-      });
-    }
-  }, [isKeySelected]);
-
   const handleTranscriptUpdate = (newMessage: ChatMessage) => {
     setMessages(prev => [...prev, newMessage]);
   }
-  
-  const handleAddNote = async (note: string, imageUrl?: string) => {
-    await createNote({ variables: { content: note, imageUrl } });
-  };
-  
-  const handleAddHaccpLog = async (logData: Omit<HaccpLog, 'id' | 'date' | 'time' | 'checkedBy' | 'correctiveAction'>) => {
-    const now = new Date();
-    await createHaccpLog({
-        variables: {
-            ...logData,
-            date: now.toISOString().split('T')[0],
-            time: now.toTimeString().split(' ')[0].substring(0, 5),
-        }
-    });
-  };
-
 
   const { 
     isSessionActive, 
@@ -137,9 +68,10 @@ const ChefBot: React.FC<ChefBotProps> = ({
     startConversation, 
     stopConversation 
   } = useGeminiLive({ 
-    onAddHaccpLog: handleAddHaccpLog,
+    onAddFoodLog,
+    onAddHaccpLog,
     onTranscriptUpdate: handleTranscriptUpdate,
-    onAddNote: handleAddNote,
+    onAddNote,
     getPlannedItems: () => plannedItems,
     onUpdateCalendar,
     onKeyError: () => setIsKeySelected(false),
@@ -181,17 +113,9 @@ const ChefBot: React.FC<ChefBotProps> = ({
       const response = await chatRef.current.sendMessage({ message: userMessage.content });
       const botMessage: ChatMessage = { role: 'bot', content: response.text };
       setMessages(prev => [...prev, botMessage]);
-      
-      const fullConversation = `(Text)\n\n**Me:** ${userMessage.content}\n\n**Eugene:** ${response.text}`;
-      await handleAddNote(fullConversation);
-
     } catch (err) {
       console.error(err);
-      let errorMessageContent = "Sorry, I encountered an error.";
-      if (err instanceof Error && err.message.includes('API key not valid')) {
-        errorMessageContent = "My apologies, but the text chat requires a valid API key. Please select one using the voice chat button below.";
-      }
-      const errorMessage: ChatMessage = { role: 'bot', content: errorMessageContent };
+      const errorMessage: ChatMessage = { role: 'bot', content: "Sorry, I encountered an error." };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsReplying(false);
@@ -211,9 +135,9 @@ const ChefBot: React.FC<ChefBotProps> = ({
       return (
         <div className="text-center py-8">
             <button onClick={handleSelectKey} className="bg-white text-dark font-semibold py-3 px-6 rounded-lg border border-medium hover:bg-light transition">
-                Select API Key to Chat
+                Select API Key for Voice Chat
             </button>
-            <p className="text-xs text-muted mt-2">All chat features require a user-selected API key.</p>
+            <p className="text-xs text-muted mt-2">Voice features require a user-selected API key.</p>
         </div>
       );
     }
@@ -304,12 +228,12 @@ const ChefBot: React.FC<ChefBotProps> = ({
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
                     placeholder={isSessionActive ? "Voice session active..." : "Type your message..."}
-                    disabled={isSessionActive || isReplying || !isKeySelected}
+                    disabled={isSessionActive || isReplying}
                     className="flex-grow bg-light border-none rounded-full p-3 pl-5 focus:ring-2 focus:ring-black focus:outline-none disabled:bg-gray-200"
                 />
                 <button
                     type="submit"
-                    disabled={isSessionActive || isReplying || !inputText.trim() || !isKeySelected}
+                    disabled={isSessionActive || isReplying || !inputText.trim()}
                     className="bg-black text-white p-3 rounded-full hover:bg-gray-800 transition duration-300 disabled:bg-gray-400"
                 >
                     {isReplying ? <Loader /> : <Icon name="send" className="h-6 w-6" />}

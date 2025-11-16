@@ -1,7 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-// fix: Import useQuery and useMutation from '@apollo/client/react' to resolve module export issue.
-import { gql } from '@apollo/client';
-import { useQuery, useMutation } from '@apollo/client/react';
 import { getMenuInspiration, getIngredientList } from '../services/geminiService';
 import { Card } from './common/Card';
 import { Loader } from './common/Loader';
@@ -12,49 +9,11 @@ import MasterOrderListModal from './MasterOrderListModal';
 import { MarkdownRenderer } from './common/MarkdownRenderer';
 import { stripMarkdown } from '../utils/text';
 import type { Ingredient, Recipe, CalendarDay, Note, CalendarView, EmailClient } from '../types';
-import SeasonalCalendar from './SeasonalCalendar';
-
-// GraphQL Operations for Notes
-const LIST_NOTES_QUERY = gql`
-  query ListNotes {
-    listNotes {
-      id
-      content
-      createdAt
-      imageUrl
-    }
-  }
-`;
-
-const UPDATE_NOTE_MUTATION = gql`
-  mutation UpdateNote($id: ID!, $content: String!) {
-    updateNote(id: $id, content: $content) {
-      id
-      content
-    }
-  }
-`;
-
-const DELETE_NOTE_MUTATION = gql`
-  mutation DeleteNote($id: ID!) {
-    deleteNote(id: $id) {
-      id
-    }
-  }
-`;
-
-// fix: Add interfaces for GraphQL results to provide strong typing for query and mutation hooks.
-interface ListNotesData {
-  listNotes: Note[];
-}
-
-interface DeleteNoteData {
-  deleteNote: {
-    id: string;
-  };
-}
 
 interface MenuInspirationProps {
+  notes: Note[];
+  onUpdateNote: (id: string, content: string) => void;
+  onDeleteNote: (id: string) => void;
   plannedItems: Record<string, CalendarDay>;
   onUpdateCalendar: (date: string, data: CalendarDay) => void;
   onRemoveRotaEntry: (date: string, index: number) => void;
@@ -64,7 +23,6 @@ interface MenuInspirationProps {
   emailClient: EmailClient;
 }
 
-// EditDayModal remains unchanged as it uses local component state
 const EditDayModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
@@ -199,8 +157,7 @@ const EditDayModal: React.FC<{
 };
 
 
-const MenuInspiration: React.FC<MenuInspirationProps> = ({ plannedItems, onUpdateCalendar, onRemoveRotaEntry, masterOrderPlan, onAddToMasterOrderPlan, onClearMasterOrderPlan, emailClient }) => {
-  // State for recipe generation remains local
+const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, onDeleteNote, plannedItems, onUpdateCalendar, onRemoveRotaEntry, masterOrderPlan, onAddToMasterOrderPlan, onClearMasterOrderPlan, emailClient }) => {
   const [prompt, setPrompt] = useState<string>('');
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -211,7 +168,6 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ plannedItems, onUpdat
   const [isListCopied, setIsListCopied] = useState(false);
   const [isAddedToPlan, setIsAddedToPlan] = useState(false);
 
-  // State for calendar and modals remains local
   const [calendarDate, setCalendarDate] = useState(new Date());
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -220,39 +176,23 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ plannedItems, onUpdat
   const [calendarView, setCalendarView] = useState<CalendarView>('Month');
   const isInitialMount = useRef(true);
 
-  // Fetch notes using Apollo Client
-  // fix: Provide the ListNotesData type to useQuery for type safety.
-  const { data: notesData, loading: notesLoading, error: notesError } = useQuery<ListNotesData>(LIST_NOTES_QUERY);
-  const notes = (notesData?.listNotes || []).slice().sort((a: Note, b: Note) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-  // Define mutations for updating and deleting notes
-  const [updateNote] = useMutation(UPDATE_NOTE_MUTATION);
-  // fix: Provide DeleteNoteData type to useMutation and safely handle the result in the update function.
-  const [deleteNote] = useMutation<DeleteNoteData>(DELETE_NOTE_MUTATION, {
-    update(cache, { data }) {
-      if (!data?.deleteNote) return;
-      cache.modify({
-        fields: {
-          listNotes(existingNotes = []) {
-            return existingNotes.filter((noteRef: any) => noteRef.__ref !== `Note:${data.deleteNote.id}`);
-          },
-        },
-      });
-    },
-  });
-
   // Effect to automatically re-fetch the recipe when the unit system changes.
   useEffect(() => {
+      // Do not run on the initial render of the component.
       if (isInitialMount.current) {
           isInitialMount.current = false;
           return;
       }
+
+      // Only re-fetch if there's an existing recipe and a prompt to work with.
+      // This prevents firing an API call if the user just toggles the units before generating anything.
       if (recipe && prompt) {
           const refetchWithNewUnits = async () => {
               setIsLoadingRecipe(true);
               setError('');
-              setIngredients([]);
+              setIngredients([]); // Clear the old ingredient list as it's now invalid.
               try {
+                  // Call the service with the current prompt and the *new* unit system.
                   const newRecipe = await getMenuInspiration(prompt, unitSystem);
                   setRecipe(newRecipe);
               } catch (err) {
@@ -262,8 +202,12 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ plannedItems, onUpdat
                   setIsLoadingRecipe(false);
               }
           };
+          
           refetchWithNewUnits();
       }
+      // This effect should ONLY be triggered by a change in the unit system.
+      // We disable the exhaustive-deps warning because we explicitly want to avoid
+      // re-running this effect when `prompt` or `recipe` change, which would cause an infinite loop.
       // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unitSystem]);
 
@@ -291,7 +235,7 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ plannedItems, onUpdat
     if (!recipe) return;
     setError('');
     setIsLoadingIngredients(true);
-    setIsAddedToPlan(false);
+    setIsAddedToPlan(false); // Reset confirmation state
     try {
       const recipeString = [
         `Title: ${recipe.title}`,
@@ -317,6 +261,7 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ plannedItems, onUpdat
       onUpdateCalendar(selectedCalendarDate, { 
           ...dayData, 
           menuItem: recipe.title,
+          // Automatically add the generated ingredients to the ordering list
           orderingList: [...(dayData.orderingList || []), ...ingredients]
       });
     }
@@ -332,13 +277,9 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ plannedItems, onUpdat
 
   const handleSaveNote = () => {
     if (editingNote) {
-      updateNote({ variables: { id: editingNote.id, content: editingNote.content } });
+      onUpdateNote(editingNote.id, editingNote.content);
       setEditingNote(null);
     }
-  };
-
-  const handleDeleteNote = (id: string) => {
-    deleteNote({ variables: { id } });
   };
 
   const handleConvertToRecipe = (content: string) => {
@@ -419,72 +360,6 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ plannedItems, onUpdat
         return null;
     }
   }
-  
-  const renderNotes = () => {
-    if (notesLoading) return <div className="text-center py-8 text-muted"><Loader /></div>;
-    if (notesError) return <div className="text-center py-8 text-red-500">Error loading notes.</div>;
-
-    if (notes.length > 0) {
-      return notes.map((note: Note) => (
-        <div 
-          key={note.id} 
-          className="bg-light p-3 rounded-lg border border-medium cursor-grab active:cursor-grabbing"
-          draggable="true"
-          onDragStart={(e) => handleNoteDragStart(e, note.content)}
-        >
-          {note.imageUrl && (
-            <img src={note.imageUrl} alt="Note attachment" className="mb-3 rounded-md max-h-48 w-full object-cover" />
-          )}
-          {editingNote?.id === note.id ? (
-            <div>
-              <textarea
-                value={editingNote.content}
-                onChange={(e) => setEditingNote({ ...editingNote, content: e.target.value })}
-                className="w-full bg-white border border-medium rounded-md p-2 mb-2 focus:ring-2 focus:ring-black focus:outline-none transition"
-                rows={3}
-                autoFocus
-              />
-              <div className="flex justify-end gap-2">
-                <button onClick={handleCancelEdit} title="Cancel" className="text-muted hover:text-dark p-2 rounded-full transition-colors">
-                  <Icon name="x-circle" className="h-5 w-5" />
-                </button>
-                <button onClick={handleSaveNote} title="Save Note" className="text-green-500 hover:text-green-700 p-2 rounded-full transition-colors">
-                  <Icon name="check" className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex justify-between items-start gap-4 group">
-              <div className="flex-grow">
-                  <MarkdownRenderer
-                    content={note.content}
-                    containerClassName="text-dark space-y-2"
-                  />
-              </div>
-              <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => handleConvertToRecipe(note.content)} title="Convert to Recipe" className="text-primary hover:text-primary-dark p-2 rounded-full transition-colors">
-                  <Icon name="idea" className="h-5 w-5" />
-                </button>
-                <button onClick={() => handleEditNote(note)} title="Edit Note" className="text-muted hover:text-dark p-2 rounded-full transition-colors">
-                  <Icon name="edit" className="h-5 w-5" />
-                </button>
-                <button onClick={() => handleDeleteNote(note.id)} title="Delete Note" className="text-red-500 hover:text-red-400 p-2 rounded-full transition-colors">
-                  <Icon name="delete" className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      ))
-    }
-    
-    return (
-      <div className="text-center py-8 text-muted">
-          <p>Notes added via the Chef Bot will appear here.</p>
-      </div>
-    );
-  };
-
 
   return (
     <>
@@ -692,7 +567,6 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ plannedItems, onUpdat
 
         {/* Right Column */}
         <div className="space-y-6">
-          <SeasonalCalendar />
           <Card>
               <h3 className="text-lg font-semibold text-dark mb-4">Consolidated Ordering Hub</h3>
               <p className="text-muted mb-4">Select a date range to generate a master order list for your suppliers.</p>
@@ -768,7 +642,63 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ plannedItems, onUpdat
               Chef's Notes
             </h3>
             <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-              {renderNotes()}
+              {notes.length > 0 ? (
+                notes.map((note) => (
+                  <div 
+                    key={note.id} 
+                    className="bg-light p-3 rounded-lg border border-medium cursor-grab active:cursor-grabbing"
+                    draggable="true"
+                    onDragStart={(e) => handleNoteDragStart(e, note.content)}
+                  >
+                    {note.imageUrl && (
+                      <img src={note.imageUrl} alt="Note attachment" className="mb-3 rounded-md max-h-48 w-full object-cover" />
+                    )}
+                    {editingNote?.id === note.id ? (
+                      <div>
+                        <textarea
+                          value={editingNote.content}
+                          onChange={(e) => setEditingNote({ ...editingNote, content: e.target.value })}
+                          className="w-full bg-white border border-medium rounded-md p-2 mb-2 focus:ring-2 focus:ring-black focus:outline-none transition"
+                          rows={3}
+                          autoFocus
+                        />
+                        <div className="flex justify-end gap-2">
+                          <button onClick={handleCancelEdit} title="Cancel" className="text-muted hover:text-dark p-2 rounded-full transition-colors">
+                            <Icon name="x-circle" className="h-5 w-5" />
+                          </button>
+                          <button onClick={handleSaveNote} title="Save Note" className="text-green-500 hover:text-green-700 p-2 rounded-full transition-colors">
+                            <Icon name="check" className="h-5 w-5" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between items-start gap-4 group">
+                        <div className="flex-grow">
+                            <MarkdownRenderer
+                              content={note.content}
+                              containerClassName="text-dark space-y-2"
+                            />
+                        </div>
+                        <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => handleConvertToRecipe(note.content)} title="Convert to Recipe" className="text-primary hover:text-primary-dark p-2 rounded-full transition-colors">
+                            <Icon name="idea" className="h-5 w-5" />
+                          </button>
+                          <button onClick={() => handleEditNote(note)} title="Edit Note" className="text-muted hover:text-dark p-2 rounded-full transition-colors">
+                            <Icon name="edit" className="h-5 w-5" />
+                          </button>
+                          <button onClick={() => onDeleteNote(note.id)} title="Delete Note" className="text-red-500 hover:text-red-400 p-2 rounded-full transition-colors">
+                            <Icon name="delete" className="h-5 w-5" />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-muted">
+                    <p>Notes added via the Chef Bot will appear here.</p>
+                </div>
+              )}
             </div>
           </Card>
         </div>

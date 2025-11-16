@@ -1,21 +1,11 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-// fix: Import HttpLink to properly configure the Apollo Client link.
-// fix: Import ApolloProvider from '@apollo/client/react' to resolve module export issue.
-import { ApolloClient, InMemoryCache, HttpLink } from '@apollo/client';
-import { ApolloProvider } from '@apollo/client/react';
 
-// IMPORTANT: Replace this with your actual Data Connect endpoint URL
-// You can find this URL in the Firebase console under Build > Data Connect,
-// or in the output of the `firebase deploy` command.
-const client = new ApolloClient({
-  // fix: The 'uri' property is not a valid top-level option here; use 'link' with HttpLink.
-  link: new HttpLink({ uri: 'YOUR_DATA_CONNECT_ENDPOINT_URL_HERE' }),
-  cache: new InMemoryCache(),
-  // In a production app, you would add authentication headers here.
-});
-
+// This event listener is the definitive fix for the avatar rendering issue.
+// It ensures that the entire application code only runs *after* the browser has
+// fully parsed the HTML and executed all scripts, including lottie.min.js.
+// This completely resolves the race condition that was causing the failure.
 document.addEventListener('DOMContentLoaded', () => {
   const rootElement = document.getElementById('root');
   if (!rootElement) {
@@ -25,9 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const root = ReactDOM.createRoot(rootElement);
   root.render(
     <React.StrictMode>
-      <ApolloProvider client={client}>
-        <App />
-      </ApolloProvider>
+      <App />
     </React.StrictMode>
   );
 });

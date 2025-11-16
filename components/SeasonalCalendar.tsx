@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { getSeasonalProduce } from '../services/geminiService';
 import { Card } from './common/Card';
 import { Loader } from './common/Loader';
 import { Icon } from './common/Icon';
+import { countries, Country } from '../data/countries';
 import type { SeasonalProduce } from '../types';
 
 
@@ -12,10 +13,6 @@ const months = [
 ] as const;
 type Month = typeof months[number];
 
-const regions = ['North America', 'South America', 'Europe', 'Africa', 'Asia', 'Australia'] as const;
-type Region = typeof regions[number];
-
-
 const initialProduceState: SeasonalProduce = {
     Fruits: [],
     Vegetables: [],
@@ -23,23 +20,38 @@ const initialProduceState: SeasonalProduce = {
 };
 
 const SeasonalCalendar: React.FC = () => {
-    const [selectedMonth, setSelectedMonth] = useState<Month>(() =>
+    const [selectedMonth, setSelectedMonth] = useState<Month>(() => 
         new Date().toLocaleString('default', { month: 'long' }) as Month
     );
-    const [selectedRegion, setSelectedRegion] = useState<Region>('North America');
+    const [selectedCountry, setSelectedCountry] = useState<Country>(
+        countries.find(c => c.name === 'United Kingdom') || countries[0]
+    );
+    const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    
     const [produce, setProduce] = useState<SeasonalProduce>(initialProduceState);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
-    const fetchProduce = async (month: Month, region: Region) => {
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+        if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+            setIsDropdownOpen(false);
+        }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const fetchProduce = async (month: Month, country: Country) => {
         setIsLoading(true);
         setError('');
         setProduce(initialProduceState);
         try {
-            const result = await getSeasonalProduce(month, region);
+            const result = await getSeasonalProduce(month, country.name);
             setProduce(result);
         } catch (err) {
-            setError(`Failed to load produce for ${month} in ${region}. Please try again.`);
+            setError(`Failed to load produce for ${month} in ${country.name}. Please try again.`);
             console.error(err);
         } finally {
             setIsLoading(false);
@@ -47,9 +59,8 @@ const SeasonalCalendar: React.FC = () => {
     };
 
     useEffect(() => {
-        fetchProduce(selectedMonth, selectedRegion);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedMonth, selectedRegion]);
+        fetchProduce(selectedMonth, selectedCountry);
+    }, [selectedMonth, selectedCountry]);
 
     const renderProduceList = (title: keyof SeasonalProduce, items: string[]) => (
         <div key={title}>
@@ -57,7 +68,7 @@ const SeasonalCalendar: React.FC = () => {
             {items.length > 0 ? (
                 <ul className="flex flex-wrap gap-2">
                     {items.map((item, index) => (
-                        <li key={index} className="bg-light text-dark text-sm font-medium px-3 py-1 rounded-full">
+                        <li key={index} className="bg-light text-dark text-sm font-medium px-3 py-1.5 rounded-full border border-medium">
                             {item}
                         </li>
                     ))}
@@ -69,57 +80,82 @@ const SeasonalCalendar: React.FC = () => {
     );
 
     return (
-        <Card>
-            <h2 className="text-xl font-bold text-dark mb-4 flex items-center">
-                <Icon name="leaf" className="h-6 w-6 mr-2 text-primary" />
-                Seasonal Produce
-            </h2>
-            <p className="text-muted mb-4">Select a month and region to discover prime fruits, vegetables, and proteins.</p>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                 <div>
-                    <label htmlFor="region-select" className="block text-sm font-medium text-muted mb-1">Region</label>
-                    <select
-                        id="region-select"
-                        value={selectedRegion}
-                        onChange={(e) => setSelectedRegion(e.target.value as Region)}
-                        className="w-full bg-light border border-medium rounded-md p-2 focus:ring-2 focus:ring-black focus:outline-none transition"
-                    >
-                        {regions.map(r => <option key={r} value={r}>{r}</option>)}
-                    </select>
+        <div className="space-y-6">
+            <Card>
+                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-4">
+                    <div>
+                        <h2 className="text-xl font-bold text-dark mb-1 flex items-center">
+                            <Icon name="leaf" className="h-6 w-6 mr-2 text-primary" />
+                            Seasonal Produce Calendar
+                        </h2>
+                        <p className="text-muted">Discover prime ingredients for any month, anywhere in the world.</p>
+                    </div>
+                     {/* Country Selector */}
+                    <div className="relative" ref={dropdownRef}>
+                        <button
+                        type="button"
+                        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                        className="bg-light h-12 w-full md:w-56 flex items-center justify-between px-3 rounded-lg border border-medium"
+                        >
+                        <span className="text-2xl mr-2">{selectedCountry.flag}</span>
+                        <span className="font-semibold text-dark flex-grow text-left">{selectedCountry.name}</span>
+                        <span className="ml-2 text-xs text-muted">&#9662;</span>
+                        </button>
+                        {isDropdownOpen && (
+                        <div className="absolute top-full mt-2 w-full md:w-72 max-h-60 overflow-y-auto bg-white rounded-lg shadow-lg border z-10">
+                            {countries.map(country => (
+                            <button
+                                type="button"
+                                key={country.name}
+                                onClick={() => {
+                                setSelectedCountry(country);
+                                setIsDropdownOpen(false);
+                                }}
+                                className="flex items-center w-full px-4 py-2 text-left hover:bg-light"
+                            >
+                                <span className="text-xl mr-3">{country.flag}</span>
+                                <span className="flex-grow text-dark">{country.name}</span>
+                                <span className="text-muted text-sm">{country.dialCode}</span>
+                            </button>
+                            ))}
+                        </div>
+                        )}
+                    </div>
                 </div>
-            </div>
+                
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                    {months.map(month => (
+                        <button
+                            key={month}
+                            onClick={() => setSelectedMonth(month)}
+                            className={`px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white focus:ring-black ${
+                                selectedMonth === month 
+                                ? "bg-black text-white shadow" 
+                                : "bg-light text-dark hover:bg-medium border border-medium"
+                            }`}
+                        >
+                            {month}
+                        </button>
+                    ))}
+                </div>
+                 {error && <p className="text-red-500 mt-4 text-center">{error}</p>}
+            </Card>
 
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 mb-6">
-                {months.map(month => (
-                    <button
-                        key={month}
-                        onClick={() => setSelectedMonth(month)}
-                        className={`px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white focus:ring-black ${
-                            selectedMonth === month
-                            ? "bg-black text-white shadow-md"
-                            : "bg-light text-dark hover:bg-medium"
-                        }`}
-                    >
-                        {month.substring(0,3)}
-                    </button>
-                ))}
-            </div>
-            {error && <p className="text-red-500 mt-4 text-center">{error}</p>}
-
-            {isLoading ? (
-                <div className="flex flex-col items-center justify-center p-8 min-h-[200px]">
-                    <Loader />
-                    <p className="mt-4 text-muted">Harvesting data for {selectedMonth} in {selectedRegion}...</p>
-                </div>
-            ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 min-h-[200px]">
-                    {renderProduceList('Fruits', produce.Fruits)}
-                    {renderProduceList('Vegetables', produce.Vegetables)}
-                    {renderProduceList('Proteins', produce.Proteins)}
-                </div>
-            )}
-        </Card>
+            <Card>
+                {isLoading ? (
+                    <div className="flex flex-col items-center justify-center p-8 min-h-[300px]">
+                        <Loader />
+                        <p className="mt-4 text-muted">Harvesting data for {selectedMonth} in {selectedCountry.name}...</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8 min-h-[300px]">
+                        {renderProduceList('Fruits', produce.Fruits)}
+                        {renderProduceList('Vegetables', produce.Vegetables)}
+                        {renderProduceList('Proteins', produce.Proteins)}
+                    </div>
+                )}
+            </Card>
+        </div>
     );
 };
 

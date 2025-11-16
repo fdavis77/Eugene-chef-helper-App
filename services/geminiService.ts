@@ -128,11 +128,11 @@ export const getSafetyAudit = async ({ foodLogs, haccpLogs }: { foodLogs: Temper
     return response.text;
 };
 
-export const getSeasonalProduce = async (month: string, region: string): Promise<SeasonalProduce> => {
+export const getSeasonalProduce = async (month: string, country: string): Promise<SeasonalProduce> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: `Create a list of prime seasonal produce for a chef for the month of ${month} in the region of ${region}. Include some unique or interesting options alongside the classics.`,
+        contents: `Create a list of prime seasonal produce for a chef in ${country} for the month of ${month}. Include some unique or interesting options alongside the classics.`,
         config: {
             responseMimeType: "application/json",
             responseSchema: {

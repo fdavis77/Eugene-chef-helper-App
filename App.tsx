@@ -3,13 +3,16 @@ import MenuInspiration from './components/MenuInspiration';
 import ChefBot from './components/ChefBot';
 import HaccpCossh from './components/HaccpCossh';
 import SousChefVision from './components/SousChefVision';
+import SeasonalCalendar from './components/SeasonalCalendar';
 import Settings from './components/Settings';
 import TopBar from './components/TopBar';
 import BottomNav from './components/BottomNav';
 import Onboarding from './components/onboarding/Onboarding';
 import SplashScreen from './components/SplashScreen';
 import { NavTab } from './constants';
-import type { CalendarDay, Ingredient, EmailClient } from './types';
+import { initDB, getNotes, saveNote, deleteNoteFromDB } from './utils/db';
+import type { TemperatureLog, CalendarDay, Note, HaccpLog, Ingredient, EmailClient } from './types';
+
 
 // Custom hook for managing state with Local Storage persistence
 function usePersistentState<T>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
@@ -17,6 +20,7 @@ function usePersistentState<T>(key: string, defaultValue: T): [T, React.Dispatch
     try {
       const storedValue = window.localStorage.getItem(key);
       return storedValue ? JSON.parse(storedValue) : defaultValue;
+    // Fix: Corrected malformed catch block which was causing multiple cascading errors.
     } catch (error) {
       console.error(`Error reading from localStorage for key "${key}":`, error);
       return defaultValue;
@@ -42,17 +46,113 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>(NavTab.Home);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  // Note and HACCP log state is now managed by individual components via Apollo Client.
-  // The global state management for these features has been removed.
-
+  const [foodLogs, setFoodLogs] = usePersistentState<TemperatureLog[]>('foodLogs', []);
+  const [haccpLogs, setHaccpLogs] = usePersistentState<HaccpLog[]>('haccpLogs', []);
+  const [notes, setNotes] = useState<Note[]>([]);
   const [plannedItems, setPlannedItems] = usePersistentState<Record<string, CalendarDay>>('plannedItems', {});
   const [masterOrderPlan, setMasterOrderPlan] = usePersistentState<Ingredient[]>('masterOrderPlan', []);
   const [emailClient, setEmailClient] = usePersistentState<EmailClient>('emailClient', 'default');
 
+  const [recentlyDeletedLog, setRecentlyDeletedLog] = useState<HaccpLog | null>(null);
+  
+  // DB initialization and initial load for notes
   useEffect(() => {
-    // Simulate app loading time
-    setTimeout(() => setIsLoading(false), 1500);
+    const loadData = async () => {
+        await initDB();
+        const dbNotes = await getNotes();
+        setNotes(dbNotes);
+        // Simulate app loading time
+        setTimeout(() => setIsLoading(false), 1500); 
+    };
+    loadData();
   }, []);
+
+  // Effect to handle the "Undo" timeout declaratively.
+  useEffect(() => {
+    if (recentlyDeletedLog) {
+      const timerId = window.setTimeout(() => {
+        setRecentlyDeletedLog(null);
+      }, 5000); // 5-second window to undo
+
+      return () => {
+        clearTimeout(timerId);
+      };
+    }
+  }, [recentlyDeletedLog]);
+
+
+  const handleAddFoodLog = (logData: Omit<TemperatureLog, 'id' | 'timestamp'>) => {
+    setFoodLogs(prevLogs => [
+      {
+        ...logData,
+        id: Date.now(),
+        timestamp: new Date().toISOString(),
+      },
+      ...prevLogs,
+    ]);
+  };
+
+  const handleAddHaccpLog = (logData: Omit<HaccpLog, 'id' | 'date' | 'time' | 'checkedBy' | 'correctiveAction'>) => {
+    const now = new Date();
+    setHaccpLogs(prev => [
+      {
+        ...logData,
+        id: Date.now(),
+        date: now.toISOString().split('T')[0],
+        time: now.toTimeString().split(' ')[0].substring(0, 5),
+        checkedBy: '',
+        correctiveAction: '',
+      },
+      ...prev,
+    ].sort((a, b) => new Date(`${b.date}T${b.time}`).getTime() - new Date(`${a.date}T${a.time}`).getTime()));
+  };
+  
+  const handleUpdateHaccpLog = (updatedLog: HaccpLog) => {
+     setHaccpLogs(prev => prev.map(log => log.id === updatedLog.id ? updatedLog : log));
+  };
+  
+  const handleDeleteHaccpLog = (id: number) => {
+    const logToDelete = haccpLogs.find(log => log.id === id);
+    if (logToDelete) {
+      setHaccpLogs(prev => prev.filter(log => log.id !== id));
+      setRecentlyDeletedLog(logToDelete);
+    }
+  };
+
+  const handleRestoreHaccpLog = () => {
+    if (recentlyDeletedLog) {
+      const logToRestore = recentlyDeletedLog;
+      setRecentlyDeletedLog(null);
+      setHaccpLogs(prev => [...prev, logToRestore].sort((a, b) => new Date(`${b.date}T${b.time}`).getTime() - new Date(`${a.date}T${a.time}`).getTime()));
+    }
+  };
+
+
+  const handleAddNote = async (noteContent: string, imageUrl?: string) => {
+    const newNote: Note = {
+      id: Date.now().toString(),
+      content: noteContent,
+      createdAt: new Date().toISOString(),
+      imageUrl,
+    };
+    await saveNote(newNote);
+    setNotes(prev => [newNote, ...prev]);
+  };
+  
+  const handleUpdateNote = async (id: string, content: string) => {
+    const noteToUpdate = notes.find(n => n.id === id);
+    if (noteToUpdate) {
+      const updatedNote = { ...noteToUpdate, content };
+      await saveNote(updatedNote);
+      setNotes(prev => prev.map(note => (note.id === id ? updatedNote : note)));
+    }
+  };
+
+  const handleDeleteNote = async (id: string) => {
+    await deleteNoteFromDB(id);
+    setNotes(prev => prev.filter(note => note.id !== id));
+  };
+
 
   const handleUpdateCalendar = (date: string, data: CalendarDay) => {
     setPlannedItems(prev => ({ ...prev, [date]: data }));
@@ -104,15 +204,22 @@ const App: React.FC = () => {
     switch (activeTab) {
       case NavTab.Home:
         return (
-          <ChefBot
+          <ChefBot 
+            notesCount={notes.length}
             plannedItemsCount={Object.keys(plannedItems).length}
+            onAddFoodLog={handleAddFoodLog} 
+            onAddHaccpLog={handleAddHaccpLog}
+            onAddNote={handleAddNote}
             plannedItems={plannedItems}
             onUpdateCalendar={handleUpdateCalendar}
           />
         );
       case NavTab.Planner:
         return (
-          <MenuInspiration
+          <MenuInspiration 
+            notes={notes}
+            onUpdateNote={handleUpdateNote}
+            onDeleteNote={handleDeleteNote}
             plannedItems={plannedItems}
             onUpdateCalendar={handleUpdateCalendar}
             onRemoveRotaEntry={handleRemoveRotaEntry}
@@ -122,11 +229,21 @@ const App: React.FC = () => {
             emailClient={emailClient}
           />
         );
+      case NavTab.Seasonal:
+        return <SeasonalCalendar />;
       case NavTab.Logs:
-        return <HaccpCossh />;
+        return <HaccpCossh 
+                  foodLogs={foodLogs} 
+                  haccpLogs={haccpLogs}
+                  onAddHaccpLog={handleAddHaccpLog}
+                  onUpdateHaccpLog={handleUpdateHaccpLog}
+                  onDeleteHaccpLog={handleDeleteHaccpLog}
+                  recentlyDeletedLog={recentlyDeletedLog}
+                  onRestoreHaccpLog={handleRestoreHaccpLog}
+                />;
       
       case NavTab.Vision:
-        return <SousChefVision />;
+        return <SousChefVision onAddNote={handleAddNote} />;
       default:
         return null;
     }

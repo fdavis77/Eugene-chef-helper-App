@@ -1,33 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-// fix: Import useMutation from '@apollo/client/react' to resolve module export issue.
-import { gql } from '@apollo/client';
-import { useMutation } from '@apollo/client/react';
 import { analyzeImage } from '../services/geminiService';
 import { Card } from './common/Card';
 import { Loader } from './common/Loader';
 import { Icon } from './common/Icon';
 import { MarkdownRenderer } from './common/MarkdownRenderer';
 
-const CREATE_NOTE_MUTATION = gql`
-  mutation CreateNote($content: String!, $imageUrl: String) {
-    createNote(content: $content, imageUrl: $imageUrl) {
-      id
-    }
-  }
-`;
+interface SousChefVisionProps {
+  onAddNote: (content: string, imageUrl?: string) => void;
+}
 
-const LIST_NOTES_QUERY = gql`
-  query ListNotes {
-    listNotes {
-      id
-      content
-      createdAt
-      imageUrl
-    }
-  }
-`;
-
-const SousChefVision: React.FC = () => {
+const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote }) => {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [prompt, setPrompt] = useState<string>('');
@@ -41,10 +23,6 @@ const SousChefVision: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-
-  const [createNote] = useMutation(CREATE_NOTE_MUTATION, {
-    refetchQueries: [{ query: LIST_NOTES_QUERY }],
-  });
 
   useEffect(() => {
     if (isCameraOpen) {
@@ -182,16 +160,11 @@ const SousChefVision: React.FC = () => {
 
     const reader = new FileReader();
     reader.readAsDataURL(imageFile);
-    reader.onload = async () => {
+    reader.onload = () => {
       const dataUrl = reader.result as string;
-      try {
-        await createNote({ variables: { content: analysis, imageUrl: dataUrl } });
-        setNoteSaved(true);
-        setTimeout(() => setNoteSaved(false), 2000);
-      } catch (err) {
-        console.error("Error saving note to backend:", err);
-        setError("Could not save note.");
-      }
+      onAddNote(analysis, dataUrl);
+      setNoteSaved(true);
+      setTimeout(() => setNoteSaved(false), 2000); // Show confirmation for 2s
     };
     reader.onerror = (error) => {
       console.error("Error converting image to data URL for notes:", error);

@@ -71,7 +71,7 @@ const PhoneEntry: React.FC<PhoneEntryProps> = ({ onContinue }) => {
                 value={phone}
                 onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
                 placeholder="Mobile number"
-                className="w-full h-14 bg-light rounded-lg pl-4 pr-12 text-lg text-dark focus:outline-none focus:ring-2 focus:ring-black"
+                className="w-full h-14 bg-light rounded-lg pl-4 pr-12 text-lg focus:outline-none focus:ring-2 focus:ring-black"
                 autoFocus
              />
              <span className="absolute top-1/2 right-4 -translate-y-1/2 text-muted text-sm">{selectedCountry.dialCode}</span>
@@ -93,12 +93,10 @@ const PhoneEntry: React.FC<PhoneEntryProps> = ({ onContinue }) => {
       </div>
       
       <div className="space-y-3">
-        <button disabled className="w-full bg-light text-dark font-semibold py-3 rounded-lg transition disabled:opacity-60 disabled:cursor-not-allowed">Continue with Google</button>
-        <button disabled className="w-full bg-light text-dark font-semibold py-3 rounded-lg transition disabled:opacity-60 disabled:cursor-not-allowed">Continue with Apple</button>
-        <button disabled className="w-full bg-light text-dark font-semibold py-3 rounded-lg transition disabled:opacity-60 disabled:cursor-not-allowed">Continue with Email</button>
+        <button className="w-full bg-light text-dark font-semibold py-3 rounded-lg hover:bg-medium transition">Continue with Google</button>
+        <button className="w-full bg-light text-dark font-semibold py-3 rounded-lg hover:bg-medium transition">Continue with Apple</button>
+        <button className="w-full bg-light text-dark font-semibold py-3 rounded-lg hover:bg-medium transition">Continue with Email</button>
       </div>
-      <p className="text-center text-xs text-muted mt-3">Note: Social sign-in options are for display purposes. Please use the phone number entry to continue.</p>
-
 
       <div className="mt-auto text-xs text-muted text-center">
         By proceeding, you consent to get calls, WhatsApp or SMS messages, including by automated means, from Eugene and its affiliates to the number provided.

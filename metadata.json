@@ -1,5 +1,5 @@
 {
-  "name": "Eugene Ai Chef",
+  "name": "Eugene AI Chef",
   "description": "An AI-powered assistant for professional chefs, offering menu inspiration, a voice-controlled chatbot for logging temperatures and drafting communications, HACCP/COSHH guidance, and a seasonal produce calendar.",
   "requestFramePermissions": [
     "microphone",

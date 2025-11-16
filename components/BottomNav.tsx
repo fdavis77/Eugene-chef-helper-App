@@ -10,6 +10,7 @@ interface BottomNavProps {
 const navItems = [
   { id: NavTab.Home, icon: 'home', label: 'Home' },
   { id: NavTab.Planner, icon: 'calendar', label: 'Planner' },
+  { id: NavTab.Seasonal, icon: 'leaf', label: 'Seasonal' },
   { id: NavTab.Logs, icon: 'clipboard-check', label: 'Logs' },
   { id: NavTab.Vision, icon: 'eye', label: 'Vision' },
 ] as const;

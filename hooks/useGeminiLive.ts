@@ -1,12 +1,14 @@
 import { useState, useRef, useCallback } from 'react';
+// fix: Removed import for LiveSession as it is not an exported member.
 import { GoogleGenAI, LiveServerMessage, Modality, Type, FunctionDeclaration, Blob } from '@google/genai';
 import { encode, decode, decodeAudioData } from '../utils/audio';
-import type { ChatMessage, CalendarDay, HaccpLog } from '../types';
+import type { ChatMessage, TemperatureLog, CalendarDay, HaccpLog } from '../types';
 
 interface GeminiLiveHookProps {
-  onAddHaccpLog: (logData: Omit<HaccpLog, 'id' | 'date' | 'time' | 'checkedBy' | 'correctiveAction'>) => Promise<void>;
+  onAddFoodLog: (logData: Omit<TemperatureLog, 'id' | 'timestamp'>) => void;
+  onAddHaccpLog: (logData: Omit<HaccpLog, 'id' | 'date' | 'time' | 'checkedBy' | 'correctiveAction'>) => void;
   onTranscriptUpdate: (message: ChatMessage) => void;
-  onAddNote: (note: string, imageUrl?: string) => Promise<void>;
+  onAddNote: (note: string, imageUrl?: string) => void;
   getPlannedItems: () => Record<string, CalendarDay>;
   onUpdateCalendar: (date: string, data: CalendarDay) => void;
   onKeyError: () => void;
@@ -130,6 +132,7 @@ const parseDate = (dateString: string): string => {
         }
     }
    
+    // Fallback for YYYY-MM-DD or other parsable formats
     const parsed = new Date(dateString);
     if (!isNaN(parsed.getTime())) {
         return parsed.toISOString().split('T')[0];
@@ -138,12 +141,13 @@ const parseDate = (dateString: string): string => {
     return today.toISOString().split('T')[0];
 };
 
-export const useGeminiLive = ({ onAddHaccpLog, onTranscriptUpdate, onAddNote, getPlannedItems, onUpdateCalendar, onKeyError }: GeminiLiveHookProps): GeminiLiveHook => {
+export const useGeminiLive = ({ onAddFoodLog, onAddHaccpLog, onTranscriptUpdate, onAddNote, getPlannedItems, onUpdateCalendar, onKeyError }: GeminiLiveHookProps): GeminiLiveHook => {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSessionActive, setIsSessionActive] = useState(false);
   const [isBotSpeaking, setIsBotSpeaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  // fix: Replaced non-exported 'LiveSession' with 'any' for the session promise ref.
   const sessionRef = useRef<Promise<any> | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -228,11 +232,13 @@ export const useGeminiLive = ({ onAddHaccpLog, onTranscriptUpdate, onAddNote, ge
             scriptProcessor.connect(inputAudioContext.destination);
           },
           onmessage: async (message: LiveServerMessage) => {
+             // Handle Function Calling
             if (message.toolCall) {
               for (const fc of message.toolCall.functionCalls) {
                  const sendResponse = (result: string) => {
                     sessionPromise.then((session) => {
                         session.sendToolResponse({
+                          // fix: The `functionResponses` property must be an array.
                           functionResponses: [{
                             id : fc.id,
                             name: fc.name,
@@ -244,13 +250,15 @@ export const useGeminiLive = ({ onAddHaccpLog, onTranscriptUpdate, onAddNote, ge
 
                 if (fc.name === 'recordTemperature') {
                    const { type, item, temperature } = fc.args as { type: string, item: string, temperature: string };
-                   if (type === 'Fridge' || type === 'Freezer') {
-                        await onAddHaccpLog({ type, label: item, temperature });
+                   if (type === 'Food') {
+                        onAddFoodLog({ type, item, temperature });
+                   } else if (type === 'Fridge' || type === 'Freezer') {
+                        onAddHaccpLog({ type, label: item, temperature });
                    }
                    sendResponse("OK, logged.");
 
                 } else if (fc.name === 'addNote') {
-                    await onAddNote(fc.args.noteContent as string);
+                    onAddNote(fc.args.noteContent as string);
                     sendResponse("OK, note saved.");
                 } else if (fc.name === 'addMenuItemToCalendar') {
                     const { date, menuItem } = fc.args;
@@ -271,6 +279,7 @@ export const useGeminiLive = ({ onAddHaccpLog, onTranscriptUpdate, onAddNote, ge
               }
             }
 
+            // Handle Audio
             const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
             if (base64Audio && outputAudioContextRef.current) {
                 setIsBotSpeaking(true);
@@ -285,6 +294,7 @@ export const useGeminiLive = ({ onAddHaccpLog, onTranscriptUpdate, onAddNote, ge
                 audioSourcesRef.current.add(source);
             }
 
+             // Handle Transcription
             if (message.serverContent?.outputTranscription) {
               currentOutputTranscription += message.serverContent.outputTranscription.text;
             }
@@ -301,12 +311,6 @@ export const useGeminiLive = ({ onAddHaccpLog, onTranscriptUpdate, onAddNote, ge
                 if (botOutput) {
                   onTranscriptUpdate({ role: 'bot', content: botOutput });
                 }
-                
-                if (userInput && botOutput) {
-                    const fullConversation = `(Voice)\n\n**Me:** ${userInput}\n\n**Eugene:** ${botOutput}`;
-                    await onAddNote(fullConversation);
-                }
-
                 currentInputTranscription = '';
                 currentOutputTranscription = '';
                 setIsBotSpeaking(false);
@@ -320,6 +324,8 @@ export const useGeminiLive = ({ onAddHaccpLog, onTranscriptUpdate, onAddNote, ge
           },
           onerror: (e: ErrorEvent) => {
             console.error('Live session error:', e);
+            // "Network error" is often a symptom of an auth/key issue with Live API.
+            // Check for common phrases that indicate this and trigger the key selection reset.
             if (e.message.includes('Network error') || e.message.includes('Requested entity was not found')) {
                 setError('A key selection is required for voice conversations. Please select your API key and try again.');
                 onKeyError();
@@ -350,7 +356,7 @@ export const useGeminiLive = ({ onAddHaccpLog, onTranscriptUpdate, onAddNote, ge
       setError('Could not access microphone. Please grant permission and try again.');
       setIsConnecting(false);
     }
-  }, [onAddHaccpLog, onTranscriptUpdate, onAddNote, getPlannedItems, onUpdateCalendar, stopConversation, onKeyError]);
+  }, [onAddFoodLog, onAddHaccpLog, onTranscriptUpdate, onAddNote, getPlannedItems, onUpdateCalendar, stopConversation, onKeyError]);
 
   const createBlob = (data: Float32Array): Blob => {
     const l = data.length;
