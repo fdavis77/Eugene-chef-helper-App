@@ -1,6 +1,28 @@
 import { GoogleGenAI, Type } from "@google/genai";
-// fix: Imported HaccpLog and TemperatureLog types.
-import type { Ingredient, Recipe, SeasonalProduce, HaccpLog, TemperatureLog } from '../types';
+import type { Ingredient, Recipe, SeasonalProduce, HaccpLog, TemperatureLog, StockTake } from '../types';
+
+const recipeSchema = {
+  type: Type.OBJECT,
+  properties: {
+    title: { type: Type.STRING, description: "The title of the recipe." },
+    description: { type: Type.STRING, description: "A brief, enticing description of the dish." },
+    yields: { type: Type.STRING, description: "How many servings the recipe makes." },
+    prepTime: { type: Type.STRING, description: "Preparation time, e.g., '20 minutes'." },
+    cookTime: { type: Type.STRING, description: "Cooking time, e.g., '45 minutes'." },
+    ingredients: {
+      type: Type.ARRAY,
+      description: "A list of all ingredients.",
+      items: { type: Type.STRING }
+    },
+    instructions: {
+      type: Type.ARRAY,
+      description: "Step-by-step instructions for preparing the dish.",
+      items: { type: Type.STRING }
+    }
+  },
+  required: ["title", "description", "yields", "prepTime", "cookTime", "ingredients", "instructions"]
+};
+
 
 export const getMenuInspiration = async (prompt: string, unitSystem: 'metric' | 'imperial'): Promise<Recipe> => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -11,27 +33,7 @@ export const getMenuInspiration = async (prompt: string, unitSystem: 'metric' | 
     contents: fullPrompt,
     config: {
       responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          title: { type: Type.STRING, description: "The title of the recipe." },
-          description: { type: Type.STRING, description: "A brief, enticing description of the dish." },
-          yields: { type: Type.STRING, description: "How many servings the recipe makes." },
-          prepTime: { type: Type.STRING, description: "Preparation time, e.g., '20 minutes'." },
-          cookTime: { type: Type.STRING, description: "Cooking time, e.g., '45 minutes'." },
-          ingredients: {
-            type: Type.ARRAY,
-            description: "A list of all ingredients.",
-            items: { type: Type.STRING }
-          },
-          instructions: {
-            type: Type.ARRAY,
-            description: "Step-by-step instructions for preparing the dish.",
-            items: { type: Type.STRING }
-          }
-        },
-        required: ["title", "description", "yields", "prepTime", "cookTime", "ingredients", "instructions"]
-      }
+      responseSchema: recipeSchema
     }
   });
 
@@ -96,7 +98,6 @@ export const getHaccpInfo = async (query: string): Promise<string> => {
     return response.text;
 };
 
-// fix: Added and exported getSafetyAudit function.
 export const getSafetyAudit = async ({ foodLogs, haccpLogs }: { foodLogs: TemperatureLog[]; haccpLogs: HaccpLog[] }): Promise<string> => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const logsData = `
@@ -189,4 +190,62 @@ export const analyzeImage = async (prompt: string, imageBase64: string, mimeType
   });
 
   return response.text;
+};
+
+export const getRecipeFromImage = async (prompt: string, imageBase64: string, mimeType: string): Promise<Recipe> => {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const imagePart = {
+    inlineData: {
+      data: imageBase64,
+      mimeType,
+    },
+  };
+  const textPart = {
+    text: `Based on the image and the following prompt, generate a detailed recipe suitable for a professional chef. Prompt: "${prompt}"`,
+  };
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: { parts: [textPart, imagePart] },
+    config: {
+      responseMimeType: "application/json",
+      responseSchema: recipeSchema,
+      systemInstruction: "You are a creative chef AI. Based on the user's image and prompt, create a unique and complete recipe. Provide a title, description, yield, timings, ingredients, and step-by-step instructions.",
+    },
+  });
+
+  try {
+    const jsonString = response.text.trim();
+    return JSON.parse(jsonString) as Recipe;
+  } catch (e) {
+    console.error("Failed to parse recipe from image JSON:", e);
+    throw new Error("Could not parse recipe from AI response.");
+  }
+};
+
+export const getStockTakeSummary = async (stockTake: StockTake, totalValue: number): Promise<string> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    const prompt = `
+      As a financial analyst for a professional kitchen, analyze the following monthly stock take data.
+      The total inventory value is ${totalValue.toFixed(2)}.
+
+      Provide a brief, actionable financial summary in Markdown format. Your summary should include:
+      1.  A "Financial Overview" section with a sentence about the total stock value.
+      2.  A "Highest Value Items" section listing the top 3-5 items contributing most to the total value.
+      3.  An "Insights & Recommendations" section with one or two clear suggestions for cost-saving, inventory optimization, or menu planning based on the data. For example, suggest using up high-quantity items or being mindful of expensive, slow-moving stock.
+
+      Stock Take Items:
+      ${JSON.stringify(stockTake.items.map(item => ({ name: item.name, category: item.category, quantity: item.quantityOnHand, unitPrice: item.unitPrice, totalValue: item.quantityOnHand * item.unitPrice })), null, 2)}
+    `;
+
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+            systemInstruction: "You are a helpful financial analyst AI for chefs. Provide concise, data-driven insights based on the stock take information provided. Use Markdown for clear formatting.",
+        },
+    });
+
+    return response.text;
 };

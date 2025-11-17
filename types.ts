@@ -23,6 +23,78 @@ export interface HaccpLog {
   correctiveAction: string;
 }
 
+export interface OpeningClosingCheck {
+  id: number;
+  date: string;
+  type: 'Opening' | 'Closing';
+  time: string;
+  checks: {
+    kitchenClean: boolean;
+    equipmentWorking: boolean;
+    temperaturesCorrect: boolean;
+    staffFitForWork: boolean;
+    wasteManaged: boolean;
+    pestControl: boolean;
+  };
+  comments: string;
+  signedBy: string;
+}
+
+export interface CoolingLog {
+  id: number;
+  date: string;
+  foodItem: string;
+  startTime: string;
+  startTemp: string;
+  time90Min: string;
+  temp90Min: string;
+  isSafeAfter90Min: boolean;
+  finalTime: string;
+  finalTemp: string;
+  totalTime: string;
+  correctiveAction: string;
+  signedBy: string;
+}
+
+export interface CosshLog {
+  id: number;
+  substanceName: string;
+  dateReceived: string;
+  location: string;
+  safetyDataSheetAvailable: boolean;
+  usageNotes: string;
+  disposedDate?: string;
+}
+
+export interface ProbeCalibrationLog {
+  id: number;
+  date: string;
+  probeId: string;
+  icePointReading: string;
+  boilingPointReading: string;
+  result: 'Pass' | 'Fail';
+  comments: string;
+  calibratedBy: string;
+}
+
+export interface StockItem {
+  id: number;
+  name: string;
+  category: string;
+  quantityOnHand: number;
+  unit: string;
+  unitPrice: number;
+}
+
+export interface StockTake {
+  id: number;
+  date: string; // YYYY-MM
+  items: StockItem[];
+  notes?: string;
+  conductedBy: string;
+}
+
+
 export interface Ingredient {
   name: string;
   quantity: string;
@@ -37,6 +109,7 @@ export interface Recipe {
   cookTime: string;
   ingredients: string[];
   instructions: string[];
+  imageUrl?: string;
 }
 
 export interface CalendarDay {
@@ -64,6 +137,16 @@ export type AnalysisMode = 'Custom' | 'Macro' | 'Technique' | 'Variation';
 
 export type EmailClient = 'default' | 'gmail' | 'outlook';
 
+export interface ProfileData {
+  image?: string;
+  firstName?: string;
+  lastName?: string;
+  age?: string;
+  country?: string;
+  city?: string;
+  placeOfWork?: string;
+}
+
 // Fix: Added ThemeName and Theme types for theme context.
 export type ThemeName = 'twilight' | 'crimson' | 'evergreen' | 'light';
 
@@ -83,4 +166,12 @@ export interface Theme {
     navButtonActiveBg: string;
     navButtonHoverBg: string;
   };
+}
+
+export type LogType = 'HaccpLog' | 'OpeningClosingCheck' | 'CoolingLog' | 'CosshLog' | 'ProbeCalibrationLog' | 'StockItem';
+
+export interface RecentlyDeletedItem {
+  type: LogType;
+  item: HaccpLog | OpeningClosingCheck | CoolingLog | CosshLog | ProbeCalibrationLog | StockItem;
+  context?: { [key: string]: any }; // For nested items, e.g., { stockTakeId: number }
 }

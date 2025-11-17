@@ -115,7 +115,6 @@ const SeasonalCalendar: React.FC = () => {
                             >
                                 <span className="text-xl mr-3">{country.flag}</span>
                                 <span className="flex-grow text-dark">{country.name}</span>
-                                <span className="text-muted text-sm">{country.dialCode}</span>
                             </button>
                             ))}
                         </div>

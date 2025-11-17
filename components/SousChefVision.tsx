@@ -1,23 +1,27 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { analyzeImage } from '../services/geminiService';
+import { analyzeImage, getRecipeFromImage } from '../services/geminiService';
 import { Card } from './common/Card';
 import { Loader } from './common/Loader';
 import { Icon } from './common/Icon';
 import { MarkdownRenderer } from './common/MarkdownRenderer';
+import type { Recipe } from '../types';
 
 interface SousChefVisionProps {
   onAddNote: (content: string, imageUrl?: string) => void;
+  onSaveVisionRecipe: (recipe: Recipe) => void;
 }
 
-const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote }) => {
+const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote, onSaveVisionRecipe }) => {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [prompt, setPrompt] = useState<string>('');
-  const [analysis, setAnalysis] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<false | 'prompt' | 'macro'>(false);
+  const [analysisResult, setAnalysisResult] = useState<string | Recipe | null>(null);
+  const [isLoading, setIsLoading] = useState<false | 'prompt' | 'macro' | 'recipe'>(false);
   const [error, setError] = useState<string>('');
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [noteSaved, setNoteSaved] = useState(false);
+  const [recipeSaved, setRecipeSaved] = useState(false);
+
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -69,7 +73,7 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote }) => {
       setImageFile(file);
       setImageUrl(URL.createObjectURL(file));
       setError('');
-      setAnalysis('');
+      setAnalysisResult(null);
     }
   };
 
@@ -87,14 +91,15 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote }) => {
       return;
     }
     setError('');
-    setAnalysis('');
+    setAnalysisResult(null);
     setNoteSaved(false);
+    setRecipeSaved(false);
     setIsLoading('prompt');
 
     try {
       const imageBase64 = await toBase64(imageFile);
       const result = await analyzeImage(prompt, imageBase64, imageFile.type);
-      setAnalysis(result);
+      setAnalysisResult(result);
     } catch (err) {
       setError('Failed to analyze image. Please try again.');
       console.error(err);
@@ -109,15 +114,16 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote }) => {
       return;
     }
     setError('');
-    setAnalysis('');
+    setAnalysisResult(null);
     setNoteSaved(false);
+    setRecipeSaved(false);
     setIsLoading('macro');
 
     try {
       const imageBase64 = await toBase64(imageFile);
       const macroPrompt = "Analyze the food in this image. Identify all visible ingredients and provide a rough estimate of the total calories for the dish shown. Format the response with headings for 'Ingredients' and 'Calorie Estimate'. **Crucially, list each ingredient and make its name bold using markdown (e.g., **Flour**, **Sugar**).** Do not use any markdown hashtags.";
       const result = await analyzeImage(macroPrompt, imageBase64, imageFile.type);
-      setAnalysis(result);
+      setAnalysisResult(result);
     } catch (err) {
       setError('Failed to get macro analysis. Please try again.');
       console.error(err);
@@ -125,6 +131,30 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote }) => {
       setIsLoading(false);
     }
   };
+  
+  const handleGenerateRecipe = async () => {
+    if (!imageFile) {
+        setError('Please upload an image to generate a recipe from.');
+        return;
+    }
+    setError('');
+    setAnalysisResult(null);
+    setNoteSaved(false);
+    setRecipeSaved(false);
+    setIsLoading('recipe');
+
+    try {
+        const imageBase64 = await toBase64(imageFile);
+        const recipePrompt = prompt.trim() || "a creative dish based on the image";
+        const result = await getRecipeFromImage(recipePrompt, imageBase64, imageFile.type);
+        setAnalysisResult(result);
+    } catch (err) {
+        setError('Failed to generate recipe from image. Please try again.');
+        console.error(err);
+    } finally {
+        setIsLoading(false);
+    }
+};
 
   const openCamera = () => {
     handleRemoveImage();
@@ -147,7 +177,7 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote }) => {
                     const imageFile = new File([blob], 'capture.jpg', { type: 'image/jpeg' });
                     setImageFile(imageFile);
                     setImageUrl(URL.createObjectURL(imageFile));
-                    setAnalysis('');
+                    setAnalysisResult(null);
                     setIsCameraOpen(false);
                 }
             }, 'image/jpeg');
@@ -156,13 +186,13 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote }) => {
   };
   
   const handleSaveToNotes = async () => {
-    if (!analysis || !imageFile) return;
+    if (!analysisResult || typeof analysisResult !== 'string' || !imageFile) return;
 
     const reader = new FileReader();
     reader.readAsDataURL(imageFile);
     reader.onload = () => {
       const dataUrl = reader.result as string;
-      onAddNote(analysis, dataUrl);
+      onAddNote(analysisResult, dataUrl);
       setNoteSaved(true);
       setTimeout(() => setNoteSaved(false), 2000); // Show confirmation for 2s
     };
@@ -171,6 +201,79 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote }) => {
       setError("Could not save image to notes.");
     };
   };
+  
+  const handleSaveRecipe = () => {
+    if (!analysisResult || typeof analysisResult === 'string' || !imageUrl) return;
+    onSaveVisionRecipe({ ...analysisResult, imageUrl });
+    setRecipeSaved(true);
+    setTimeout(() => setRecipeSaved(false), 2000);
+  }
+
+  const renderResult = () => {
+    if (!analysisResult) return null;
+
+    if (typeof analysisResult === 'string') {
+        return (
+            <div>
+                <MarkdownRenderer content={analysisResult} />
+                <div className="flex justify-end mt-4">
+                    <button
+                        onClick={handleSaveToNotes}
+                        disabled={noteSaved}
+                        className="bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700 transition duration-300 disabled:bg-green-800/50 disabled:cursor-not-allowed flex items-center justify-center"
+                    >
+                        {noteSaved ? (
+                            <><Icon name="check" className="h-5 w-5 mr-2" />Saved!</>
+                        ) : (
+                            <><Icon name="save" className="h-5 w-5 mr-2" />Save to Notes</>
+                        )}
+                    </button>
+                </div>
+            </div>
+        );
+    }
+    
+    // Render Recipe
+    const recipe = analysisResult;
+    return (
+        <div>
+            <h3 className="text-xl font-bold text-dark mb-2">{recipe.title}</h3>
+            <p className="text-muted italic mb-4">{recipe.description}</p>
+            <div className="flex space-x-6 mb-6 text-sm">
+                <div><p className="font-bold text-dark">Yields:</p><p className="text-muted">{recipe.yields}</p></div>
+                <div><p className="font-bold text-dark">Prep time:</p><p className="text-muted">{recipe.prepTime}</p></div>
+                <div><p className="font-bold text-dark">Cook time:</p><p className="text-muted">{recipe.cookTime}</p></div>
+            </div>
+            <div className="space-y-6">
+                <div>
+                    <h4 className="font-semibold text-dark mb-2 border-b border-medium pb-1">Ingredients</h4>
+                    <ul className="list-disc list-inside space-y-1 text-muted pl-2">
+                        {recipe.ingredients.map((item, index) => <li key={index}>{item}</li>)}
+                    </ul>
+                </div>
+                <div>
+                    <h4 className="font-semibold text-dark mb-2 border-b border-medium pb-1">Instructions</h4>
+                    <ol className="list-decimal list-inside space-y-3 text-muted pl-2">
+                        {recipe.instructions.map((step, index) => <li key={index}>{step}</li>)}
+                    </ol>
+                </div>
+            </div>
+            <div className="flex justify-end mt-4">
+                <button
+                    onClick={handleSaveRecipe}
+                    disabled={recipeSaved}
+                    className="bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700 transition duration-300 disabled:bg-green-800/50 disabled:cursor-not-allowed flex items-center justify-center"
+                >
+                    {recipeSaved ? (
+                        <><Icon name="check" className="h-5 w-5 mr-2" />Saved!</>
+                    ) : (
+                        <><Icon name="book" className="h-5 w-5 mr-2" />Save to Recipe Folder</>
+                    )}
+                </button>
+            </div>
+        </div>
+    );
+  }
 
 
   return (
@@ -226,14 +329,14 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote }) => {
                     rows={6}
                     aria-label="Prompt for image analysis"
                 />
-                <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <button
                         onClick={handleAnalyze}
                         disabled={!!isLoading || !imageFile || !prompt.trim()}
                         className="w-full bg-black text-white font-bold py-3 px-6 rounded-md hover:bg-gray-800 transition duration-300 disabled:bg-gray-500 flex items-center justify-center"
                         aria-label="Analyze Image with custom prompt"
                     >
-                        {isLoading === 'prompt' ? <Loader /> : 'Analyze with Prompt'}
+                        {isLoading === 'prompt' ? <Loader /> : 'Analyze'}
                     </button>
                     <button
                         onClick={handleMacroAnalysis}
@@ -241,13 +344,15 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote }) => {
                         className="w-full bg-teal-500 text-white font-bold py-3 px-6 rounded-md hover:bg-teal-600 transition duration-300 disabled:bg-gray-500 flex items-center justify-center"
                         aria-label="Get Macro Analysis"
                     >
-                        {isLoading === 'macro' ? <Loader /> : 
-                        (
-                            <>
-                                <Icon name="chart-pie" className="h-5 w-5 mr-2"/>
-                                Get Macro Analysis
-                            </>
-                        )}
+                        {isLoading === 'macro' ? <Loader /> : <Icon name="chart-pie" className="h-5 w-5"/>}
+                    </button>
+                     <button
+                        onClick={handleGenerateRecipe}
+                        disabled={!!isLoading || !imageFile}
+                        className="w-full bg-primary text-white font-bold py-3 px-6 rounded-md hover:bg-primary-dark transition duration-300 disabled:bg-gray-500 flex items-center justify-center"
+                        aria-label="Generate Recipe from Image"
+                    >
+                        {isLoading === 'recipe' ? <Loader /> : <Icon name="sparkles" className="h-5 w-5"/>}
                     </button>
                 </div>
             </div>
@@ -255,7 +360,7 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote }) => {
         {error && <p className="text-red-500 mt-4">{error}</p>}
       </Card>
       
-      {(isLoading || analysis) && (
+      {(isLoading || analysisResult) && (
         <Card>
             <h3 className="text-lg font-semibold text-dark mb-4">Analysis Result</h3>
             {isLoading ? (
@@ -264,30 +369,7 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote }) => {
                     <p className="mt-4 text-muted">Analyzing image...</p>
                 </div>
             ) : (
-                analysis && (
-                    <div>
-                        <MarkdownRenderer content={analysis} />
-                        <div className="flex justify-end mt-4">
-                            <button
-                                onClick={handleSaveToNotes}
-                                disabled={noteSaved}
-                                className="bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700 transition duration-300 disabled:bg-green-800/50 disabled:cursor-not-allowed flex items-center justify-center"
-                            >
-                                {noteSaved ? (
-                                    <>
-                                        <Icon name="check" className="h-5 w-5 mr-2" />
-                                        Saved!
-                                    </>
-                                ) : (
-                                    <>
-                                        <Icon name="save" className="h-5 w-5 mr-2" />
-                                        Save to Notes
-                                    </>
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                )
+                renderResult()
             )}
         </Card>
       )}

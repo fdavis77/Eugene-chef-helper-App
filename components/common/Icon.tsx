@@ -1,6 +1,6 @@
 import React from 'react';
 
-type IconName = 'chef' | 'utensils' | 'bot' | 'book' | 'leaf' | 'idea' | 'list' | 'mic' | 'user' | 'thermometer' | 'visibility' | 'image' | 'send' | 'history' | 'add' | 'delete' | 'help' | 'shield-check' | 'chart-pie' | 'camera' | 'notebook' | 'chevron-left' | 'chevron-right' | 'users' | 'edit' | 'check' | 'x-circle' | 'calendar-days' | 'undo' | 'save' | 'clipboard-list' | 'copy' | 'download' | 'mail' | 'settings' | 'sun' | 'moon' | 'key' | 'flask' | 'sparkles' | 'home' | 'calendar' | 'clipboard-check' | 'eye' | 'user-circle';
+type IconName = 'chef' | 'utensils' | 'bot' | 'book' | 'leaf' | 'idea' | 'list' | 'mic' | 'user' | 'thermometer' | 'visibility' | 'image' | 'send' | 'history' | 'add' | 'delete' | 'help' | 'shield-check' | 'chart-pie' | 'camera' | 'notebook' | 'chevron-left' | 'chevron-right' | 'users' | 'edit' | 'check' | 'x-circle' | 'calendar-days' | 'undo' | 'save' | 'clipboard-list' | 'copy' | 'download' | 'mail' | 'settings' | 'sun' | 'moon' | 'key' | 'flask' | 'sparkles' | 'home' | 'calendar' | 'clipboard-check' | 'eye' | 'user-circle' | 'brain' | 'play' | 'pause' | 'sound-on' | 'sound-off' | 'quote';
 
 interface IconProps {
     name: IconName;
@@ -238,6 +238,36 @@ const ICONS: Record<IconName, React.FC<React.SVGProps<SVGSVGElement>>> = {
       <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" />
       </svg>
+    ),
+    brain: (props) => (
+      <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 0 0-5.78 1.128 2.25 2.25 0 0 1-2.475 2.118 2.25 2.25 0 0 0-2.475 2.118c0 .346.02.69.06.103 1.156.98 2.834 1.633 4.653 1.843a3.75 3.75 0 0 0 3.263-3.263 3 3 0 0 0 5.78-1.128 2.25 2.25 0 0 1 2.475-2.118 2.25 2.25 0 0 0 2.475-2.118c0-.346-.02-.69-.06-1.03a3.75 3.75 0 0 0-3.263-3.263 3 3 0 0 0-5.78 1.128 2.25 2.25 0 0 1-2.475 2.118 2.25 2.25 0 0 0-2.475 2.118ZM10.5 8.625a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5ZM13.5 11.25a2.25 2.25 0 1 0 0-4.5 2.25 2.25 0 0 0 0 4.5Z" />
+      </svg>
+    ),
+    play: (props) => (
+      <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M8 5v14l11-7z" />
+      </svg>
+    ),
+    pause: (props) => (
+      <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+      </svg>
+    ),
+    'sound-on': (props) => (
+      <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 0 1 0 12.728M16.463 8.288a5.25 5.25 0 0 1 0 7.424M6.75 8.25l4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+      </svg>
+    ),
+    'sound-off': (props) => (
+      <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 9.75 19.5 12m0 0 2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6 4.72-4.72a.75.75 0 0 1 1.28.53v15.88a.75.75 0 0 1-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 0 1 2.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75Z" />
+      </svg>
+    ),
+    quote: (props) => (
+        <svg {...props} xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6 17h3l2-4V7H5v6h3l-2 4zm8 0h3l2-4V7h-6v6h3l-2 4z"/>
+        </svg>
     ),
 };
 

@@ -13,6 +13,7 @@ const navItems = [
   { id: NavTab.Seasonal, icon: 'leaf', label: 'Seasonal' },
   { id: NavTab.Logs, icon: 'clipboard-check', label: 'Logs' },
   { id: NavTab.Vision, icon: 'eye', label: 'Vision' },
+  { id: NavTab.Wellness, icon: 'brain', label: 'Wellness' },
 ] as const;
 
 const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab }) => {

@@ -4,4 +4,5 @@ export enum NavTab {
   Seasonal = 'Seasonal',
   Logs = 'Logs',
   Vision = 'Vision',
+  Wellness = 'Wellness',
 }

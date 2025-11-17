@@ -6,6 +6,7 @@ import { Icon } from './common/Icon';
 import Calendar from './common/Calendar';
 import AgendaCalendar from './common/AgendaCalendar';
 import MasterOrderListModal from './MasterOrderListModal';
+import RecipeFolderModal from './RecipeFolderModal';
 import { MarkdownRenderer } from './common/MarkdownRenderer';
 import { stripMarkdown } from '../utils/text';
 import type { Ingredient, Recipe, CalendarDay, Note, CalendarView, EmailClient } from '../types';
@@ -21,6 +22,7 @@ interface MenuInspirationProps {
   onAddToMasterOrderPlan: (items: Ingredient[]) => void;
   onClearMasterOrderPlan: () => void;
   emailClient: EmailClient;
+  visionRecipes: Recipe[];
 }
 
 const EditDayModal: React.FC<{
@@ -157,7 +159,7 @@ const EditDayModal: React.FC<{
 };
 
 
-const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, onDeleteNote, plannedItems, onUpdateCalendar, onRemoveRotaEntry, masterOrderPlan, onAddToMasterOrderPlan, onClearMasterOrderPlan, emailClient }) => {
+const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, onDeleteNote, plannedItems, onUpdateCalendar, onRemoveRotaEntry, masterOrderPlan, onAddToMasterOrderPlan, onClearMasterOrderPlan, emailClient, visionRecipes }) => {
   const [prompt, setPrompt] = useState<string>('');
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -172,6 +174,7 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
+  const [isRecipeFolderOpen, setIsRecipeFolderOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<{ id: string, content: string } | null>(null);
   const [calendarView, setCalendarView] = useState<CalendarView>('Month');
   const isInitialMount = useRef(true);
@@ -378,6 +381,11 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
         onClearMasterOrderPlan={onClearMasterOrderPlan}
         emailClient={emailClient}
       />
+      <RecipeFolderModal
+        isOpen={isRecipeFolderOpen}
+        onClose={() => setIsRecipeFolderOpen(false)}
+        recipes={visionRecipes}
+      />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left Column */}
         <div className="space-y-6">
@@ -568,15 +576,28 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
         {/* Right Column */}
         <div className="space-y-6">
           <Card>
-              <h3 className="text-lg font-semibold text-dark mb-4">Consolidated Ordering Hub</h3>
-              <p className="text-muted mb-4">Select a date range to generate a master order list for your suppliers.</p>
-              <button 
-                  onClick={() => setIsOrderModalOpen(true)}
-                  className="w-full bg-black text-white font-bold py-3 px-6 rounded-md hover:bg-gray-800 transition duration-300 flex items-center justify-center"
-              >
-                  <Icon name="clipboard-list" className="h-5 w-5 mr-2" />
-                  Generate Master Order List
-              </button>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-dark">Ordering Hub</h3>
+                  <p className="text-muted text-sm">Consolidate your ordering lists.</p>
+                </div>
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <button 
+                      onClick={() => setIsOrderModalOpen(true)}
+                      className="w-full bg-black text-white font-bold py-2 px-4 rounded-md hover:bg-gray-800 transition duration-300 flex items-center justify-center text-sm"
+                  >
+                      <Icon name="clipboard-list" className="h-4 w-4 mr-2" />
+                      Master List
+                  </button>
+                   <button 
+                      onClick={() => setIsRecipeFolderOpen(true)}
+                      className="w-full bg-black text-white font-bold py-2 px-4 rounded-md hover:bg-gray-800 transition duration-300 flex items-center justify-center text-sm"
+                  >
+                      <Icon name="book" className="h-4 w-4 mr-2" />
+                      Recipe Folder
+                  </button>
+                </div>
+            </div>
           </Card>
           
           <Card>
