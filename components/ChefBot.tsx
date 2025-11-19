@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useRef } from 'react';
+
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { GoogleGenAI, Chat } from '@google/genai';
 import { useGeminiLive } from '../hooks/useGeminiLive';
 import { Card } from './common/Card';
 import { Icon } from './common/Icon';
 import { Loader } from './common/Loader';
 import AnimatedAvatar from './AnimatedAvatar';
-import type { ChatMessage, TemperatureLog, CalendarDay, HaccpLog } from '../types';
+import { useTheme } from '../contexts/ThemeContext';
+import type { ChatMessage, TemperatureLog, CalendarDay, HaccpLog, OpeningClosingCheck } from '../types';
 
 interface ChefBotProps {
   notesCount: number;
@@ -15,6 +17,8 @@ interface ChefBotProps {
   onAddNote: (note: string, imageUrl?: string) => void;
   plannedItems: Record<string, CalendarDay>;
   onUpdateCalendar: (date: string, data: CalendarDay) => void;
+  haccpLogs: HaccpLog[];
+  openingClosingLogs: OpeningClosingCheck[];
 }
 
 type AvatarState = 'idle' | 'listening' | 'thinking' | 'speaking';
@@ -26,7 +30,9 @@ const ChefBot: React.FC<ChefBotProps> = ({
   onAddHaccpLog,
   onAddNote,
   plannedItems,
-  onUpdateCalendar
+  onUpdateCalendar,
+  haccpLogs,
+  openingClosingLogs
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
@@ -35,8 +41,23 @@ const ChefBot: React.FC<ChefBotProps> = ({
   const [isKeyChecked, setIsKeyChecked] = useState(false);
   const [isKeySelected, setIsKeySelected] = useState(false);
 
+  const { activeTheme } = useTheme();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatRef = useRef<Chat | null>(null);
+  const today = new Date().toISOString().split('T')[0];
+
+  // Dashboard Data Calculations
+  const todayPlan = useMemo(() => plannedItems[today] || {}, [plannedItems, today]);
+  const todayOpeningCheck = useMemo(() => openingClosingLogs.find(log => log.date === today && log.type === 'Opening'), [openingClosingLogs, today]);
+  const todayHaccpCount = useMemo(() => haccpLogs.filter(log => log.date === today).length, [haccpLogs, today]);
+  
+  const complianceScore = useMemo(() => {
+      let score = 0;
+      if (todayOpeningCheck) score += 50;
+      if (todayHaccpCount > 1) score += 50; // Arbitrary threshold: at least 2 checks
+      return score;
+  }, [todayOpeningCheck, todayHaccpCount]);
+
 
   useEffect(() => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -155,52 +176,97 @@ const ChefBot: React.FC<ChefBotProps> = ({
             <div className={`relative w-32 h-32 ${color} rounded-full flex items-center justify-center transition-colors ring-4 ${ringColor}`}>
                 <Icon name="mic" className="h-12 w-12"/>
             </div>
-            <p className="font-semibold text-dark mt-4">{getVoiceButtonStatus()}</p>
+            <p className={`font-semibold ${activeTheme.classes.textColor} mt-4`}>{getVoiceButtonStatus()}</p>
        </div>
     )
   }
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-dark">Hello, Chef</h1>
-        <p className="text-muted">How can Eugene assist you today?</p>
+    <div className="space-y-6">
+      {/* Date Header */}
+      <div className="flex items-center justify-between">
+        <div>
+            <h1 className={`text-3xl font-bold ${activeTheme.classes.textHeading}`}>Today's Service</h1>
+            <p className={`${activeTheme.classes.textMuted}`}>{new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+        </div>
+        <div className={`px-4 py-2 rounded-full border font-bold ${complianceScore === 100 ? 'bg-green-100 text-green-800 border-green-200' : 'bg-yellow-100 text-yellow-800 border-yellow-200'}`}>
+             {complianceScore === 100 ? 'Compliance OK' : 'Tasks Pending'}
+        </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-4">
-        <Card className="flex items-center gap-4">
-          <Icon name="notebook" className="h-8 w-8 text-primary"/>
-          <div>
-            <p className="text-2xl font-bold text-dark">{notesCount}</p>
-            <p className="text-sm text-muted">Notes Saved</p>
-          </div>
+      {/* Dashboard Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Menu & Rota Card */}
+        <Card>
+            <div className="flex items-start justify-between mb-2">
+                <h3 className={`font-semibold ${activeTheme.classes.textHeading}`}>Menu & Staff</h3>
+                <Icon name="calendar-days" className="h-5 w-5 text-primary"/>
+            </div>
+            <div className="space-y-3">
+                <div>
+                    <p className={`text-xs font-bold uppercase ${activeTheme.classes.textMuted}`}>Main Feature</p>
+                    <p className={`text-lg ${activeTheme.classes.textColor}`}>{todayPlan.menuItem || 'No specific item planned.'}</p>
+                </div>
+                <div>
+                     <p className={`text-xs font-bold uppercase ${activeTheme.classes.textMuted}`}>Rota</p>
+                     <div className="flex flex-wrap gap-2 mt-1">
+                        {todayPlan.rota && todayPlan.rota.length > 0 ? (
+                            todayPlan.rota.map((person, i) => (
+                                <span key={i} className={`text-sm px-2 py-1 rounded-md ${activeTheme.classes.inputBg} ${activeTheme.classes.textColor}`}>{person}</span>
+                            ))
+                        ) : (
+                            <span className={`text-sm italic ${activeTheme.classes.textMuted}`}>No staff assigned.</span>
+                        )}
+                     </div>
+                </div>
+            </div>
         </Card>
-        <Card className="flex items-center gap-4">
-          <Icon name="calendar-days" className="h-8 w-8 text-primary"/>
-          <div>
-            <p className="text-2xl font-bold text-dark">{plannedItemsCount}</p>
-            <p className="text-sm text-muted">Planned Days</p>
-          </div>
+
+        {/* Compliance Status Card */}
+        <Card>
+             <div className="flex items-start justify-between mb-2">
+                <h3 className={`font-semibold ${activeTheme.classes.textHeading}`}>Compliance Status</h3>
+                <Icon name="shield-check" className={`h-5 w-5 ${complianceScore === 100 ? 'text-green-500' : 'text-orange-500'}`}/>
+            </div>
+            <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                    <span className={activeTheme.classes.textColor}>Opening Checks</span>
+                    <Icon name={todayOpeningCheck ? 'check' : 'x-circle'} className={`h-5 w-5 ${todayOpeningCheck ? 'text-green-500' : 'text-red-400'}`} />
+                </div>
+                <div className="flex items-center justify-between">
+                    <span className={activeTheme.classes.textColor}>Fridge Logs ({todayHaccpCount})</span>
+                    <Icon name={todayHaccpCount > 0 ? 'check' : 'x-circle'} className={`h-5 w-5 ${todayHaccpCount > 0 ? 'text-green-500' : 'text-red-400'}`} />
+                </div>
+                <div className="mt-2 pt-2 border-t border-gray-200/20">
+                    <p className={`text-xs ${activeTheme.classes.textMuted}`}>Total Notes: {notesCount} | Planned Days: {plannedItemsCount}</p>
+                </div>
+            </div>
         </Card>
       </div>
       
-      {/* Integrated Chat UI */}
-      <Card className="flex flex-col h-[60vh] max-h-[700px]">
+      {/* AI Interaction Section */}
+      <Card className="flex flex-col h-[50vh] max-h-[600px]">
+        <div className="flex items-center gap-3 border-b pb-3 mb-2 border-gray-200/20">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
+                 <AnimatedAvatar state={avatarState} />
+            </div>
+            <div>
+                <h3 className={`font-bold ${activeTheme.classes.textColor}`}>Ask Eugene</h3>
+                <p className="text-xs text-muted">Voice & Text Assistant</p>
+            </div>
+        </div>
+
         {/* Message History */}
         <div className="flex-grow overflow-y-auto mb-4 space-y-4 pr-2">
            {messages.length === 0 && (
              <div className="flex flex-col h-full items-center justify-center text-center text-muted">
-                <Icon name="bot" className="h-12 w-12 mb-2"/>
-                <p>Your conversation with Eugene will appear here.</p>
-                <p className="text-sm">Start by typing or tapping the voice button.</p>
+                <p>Ready to help. Tap the mic to start logging.</p>
              </div>
            )}
            {messages.map((msg, index) => (
             <div key={index} className={`flex items-start gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 {msg.role === 'bot' && <div className="w-8 h-8 flex-shrink-0 mt-1 rounded-full bg-light flex items-center justify-center"><Icon name="bot" className="h-5 w-5 text-muted"/></div>}
-                <div className={`max-w-xs md:max-w-md px-4 py-3 rounded-2xl ${msg.role === 'user' ? "bg-black text-white rounded-br-lg" : 'bg-light text-dark rounded-bl-lg'}`}>
+                <div className={`max-w-xs md:max-w-md px-4 py-3 rounded-2xl ${msg.role === 'user' ? "bg-primary text-white rounded-br-lg" : 'bg-light text-dark rounded-bl-lg'}`}>
                     <p className="whitespace-pre-wrap">{msg.content}</p>
                 </div>
             </div>
@@ -229,12 +295,12 @@ const ChefBot: React.FC<ChefBotProps> = ({
                     onChange={(e) => setInputText(e.target.value)}
                     placeholder={isSessionActive ? "Voice session active..." : "Type your message..."}
                     disabled={isSessionActive || isReplying}
-                    className="flex-grow bg-light border-none rounded-full p-3 pl-5 focus:ring-2 focus:ring-black focus:outline-none disabled:bg-gray-200"
+                    className="flex-grow bg-light border-none rounded-full p-3 pl-5 focus:ring-2 focus:ring-primary focus:outline-none disabled:bg-gray-200"
                 />
                 <button
                     type="submit"
                     disabled={isSessionActive || isReplying || !inputText.trim()}
-                    className="bg-black text-white p-3 rounded-full hover:bg-gray-800 transition duration-300 disabled:bg-gray-400"
+                    className="bg-primary text-white p-3 rounded-full hover:bg-primary-dark transition duration-300 disabled:bg-gray-400"
                 >
                     {isReplying ? <Loader /> : <Icon name="send" className="h-6 w-6" />}
                 </button>

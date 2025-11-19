@@ -77,13 +77,13 @@ const Calendar: React.FC<CalendarProps> = ({ currentDate, onSetDate, events, sel
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <button onClick={handlePrevMonth} className="p-2 rounded-full hover:bg-light">
+        <button onClick={handlePrevMonth} className="p-2 rounded-full hover:bg-light" aria-label="Previous month">
           <Icon name="chevron-left" className="w-5 h-5 text-muted" />
         </button>
         <h4 className="font-semibold text-lg text-dark">
           {currentDate.toLocaleString('default', { month: 'long' })} {year}
         </h4>
-        <button onClick={handleNextMonth} className="p-2 rounded-full hover:bg-light">
+        <button onClick={handleNextMonth} className="p-2 rounded-full hover:bg-light" aria-label="Next month">
           <Icon name="chevron-right" className="w-5 h-5 text-muted" />
         </button>
       </div>
@@ -109,7 +109,7 @@ const Calendar: React.FC<CalendarProps> = ({ currentDate, onSetDate, events, sel
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, dateStr)}
               className={`h-20 p-1.5 border rounded-md cursor-pointer transition-colors duration-200 flex flex-col ${
-                isSelected ? 'bg-black border-black text-white' : 
+                isSelected ? 'bg-primary border-primary text-white' : 
                 isToday ? 'bg-medium border-gray-300' : 'border-medium hover:bg-light'
               } ${draggedOverDate === dateStr ? 'ring-2 ring-primary ring-inset' : ''}`}
             >

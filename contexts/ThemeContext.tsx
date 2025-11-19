@@ -1,6 +1,7 @@
-import React, { createContext, useState, useContext, useMemo } from 'react';
+import React, { createContext, useContext, useMemo } from 'react';
 import { themes } from '../utils/themes';
 import type { Theme, ThemeName } from '../types';
+import { usePersistentState } from '../hooks/usePersistentState';
 
 interface ThemeContextType {
   themeName: ThemeName;
@@ -10,8 +11,16 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+const isValidThemeName = (name: any): name is ThemeName => {
+    return name === 'dark' || name === 'light' || name === 'evergreen';
+};
+
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [themeName, setTheme] = useState<ThemeName>('twilight');
+  const [storedTheme, setTheme] = usePersistentState<ThemeName>('themeName', 'light');
+
+  // Validate theme from localStorage, default to 'light' if it's invalid (e.g., from a previous session)
+  const themeName = isValidThemeName(storedTheme) ? storedTheme : 'light';
+
   const activeTheme = useMemo(() => themes[themeName], [themeName]);
 
   return (

@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 // This event listener is the definitive fix for the avatar rendering issue.
 // It ensures that the entire application code only runs *after* the browser has
@@ -15,7 +16,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const root = ReactDOM.createRoot(rootElement);
   root.render(
     <React.StrictMode>
-      <App />
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
     </React.StrictMode>
   );
 });

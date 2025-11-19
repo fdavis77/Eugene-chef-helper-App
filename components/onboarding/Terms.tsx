@@ -31,7 +31,7 @@ const Terms: React.FC<TermsProps> = ({ onAgree, onBack }) => {
                 type="checkbox"
                 checked={agreed}
                 onChange={(e) => setAgreed(e.target.checked)}
-                className="h-6 w-6 rounded-md border-gray-300 text-black focus:ring-black"
+                className="h-6 w-6 rounded-md border-gray-300 text-primary focus:ring-primary"
             />
         </label>
       </div>
@@ -40,7 +40,7 @@ const Terms: React.FC<TermsProps> = ({ onAgree, onBack }) => {
         <button 
           onClick={onAgree}
           disabled={!agreed}
-          className="bg-black text-white rounded-full p-4 disabled:bg-gray-300"
+          className="bg-primary text-white rounded-full p-4 disabled:bg-gray-300"
         >
             <Icon name="chevron-right" className="w-6 h-6" />
         </button>

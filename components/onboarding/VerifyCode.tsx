@@ -83,7 +83,7 @@ const VerifyCode: React.FC<VerifyCodeProps> = ({ phoneNumber, onContinue, onBack
             onChange={e => handleChange(e, index)}
             onKeyDown={e => handleKeyDown(e, index)}
             onPaste={index === 0 ? handlePaste : undefined}
-            className="w-14 h-16 bg-light rounded-lg text-center text-2xl font-bold focus:outline-none focus:ring-2 focus:ring-black"
+            className="w-14 h-16 bg-light rounded-lg text-center text-2xl font-bold focus:outline-none focus:ring-2 focus:ring-primary"
           />
         ))}
       </div>
@@ -100,7 +100,7 @@ const VerifyCode: React.FC<VerifyCodeProps> = ({ phoneNumber, onContinue, onBack
 
        {isCodeComplete && (
             <div className="mt-auto flex justify-end">
-                <div className="bg-black text-white rounded-full p-4">
+                <div className="bg-primary text-white rounded-full p-4">
                      <Icon name="check" className="w-6 h-6" />
                 </div>
             </div>

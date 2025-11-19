@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavTab } from '../constants';
 import { Icon } from './common/Icon';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface BottomNavProps {
   activeTab: NavTab;
@@ -10,13 +11,14 @@ interface BottomNavProps {
 const navItems = [
   { id: NavTab.Home, icon: 'home', label: 'Home' },
   { id: NavTab.Planner, icon: 'calendar', label: 'Planner' },
-  { id: NavTab.Seasonal, icon: 'leaf', label: 'Seasonal' },
+  { id: NavTab.Seasonal, icon: 'carrot', label: 'Seasonal' },
   { id: NavTab.Logs, icon: 'clipboard-check', label: 'Logs' },
   { id: NavTab.Vision, icon: 'eye', label: 'Vision' },
-  { id: NavTab.Wellness, icon: 'brain', label: 'Wellness' },
+  { id: NavTab.Wellness, icon: 'chef-hat', label: 'Wellness' },
 ] as const;
 
 const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab }) => {
+  const { activeTheme } = useTheme();
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-medium z-20">
       <div className="container mx-auto flex justify-around">
@@ -25,7 +27,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab }) => {
             key={item.id}
             onClick={() => setActiveTab(item.id)}
             className={`flex flex-col items-center justify-center pt-3 pb-2 w-full transition-colors duration-200 text-sm ${
-              activeTab === item.id ? 'text-black' : 'text-muted hover:text-dark'
+              activeTab === item.id ? 'text-primary' : `${activeTheme.classes.textMuted} hover:${activeTheme.classes.textColor}`
             }`}
             aria-current={activeTab === item.id ? 'page' : undefined}
           >

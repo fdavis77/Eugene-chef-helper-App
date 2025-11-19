@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card } from './common/Card';
 import { Icon } from './common/Icon';
+import { useTheme } from '../contexts/ThemeContext';
 import type { CalendarDay, Ingredient, EmailClient } from '../types';
 
 interface MasterOrderListModalProps {
@@ -23,6 +24,7 @@ const MasterOrderListModal: React.FC<MasterOrderListModalProps> = ({ isOpen, onC
   const [masterList, setMasterList] = useState<Ingredient[]>([]);
   const [newItem, setNewItem] = useState<Ingredient>({ name: '', quantity: '', unit: '' });
   const [copied, setCopied] = useState(false);
+  const { activeTheme } = useTheme();
 
   useEffect(() => {
     if (isOpen) {
@@ -68,6 +70,8 @@ const MasterOrderListModal: React.FC<MasterOrderListModalProps> = ({ isOpen, onC
   }, [isOpen, plannedItems, startDate, endDate, masterOrderPlan]);
   
   if (!isOpen) return null;
+  
+  const inputClasses = `w-full border rounded-md p-2 focus:ring-2 focus:ring-primary focus:outline-none transition ${activeTheme.classes.inputBg} ${activeTheme.classes.inputText} ${activeTheme.classes.inputBorder} ${activeTheme.classes.placeholderText}`;
 
   const handleAddNewItem = () => {
     if (newItem.name.trim() && newItem.quantity.trim()) {
@@ -124,63 +128,72 @@ const MasterOrderListModal: React.FC<MasterOrderListModalProps> = ({ isOpen, onC
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
-      <div className="w-full max-w-3xl bg-white rounded-2xl" onClick={e => e.stopPropagation()}>
-        <Card className="max-h-[90vh] flex flex-col">
-          <h3 className="text-xl font-bold text-dark mb-4 flex-shrink-0">Generate Master Order List</h3>
+      {/* Wrapper ensures fixed height (90vh) and full width */}
+      <div className={`w-full max-w-4xl h-[90vh] rounded-2xl ${activeTheme.classes.appBg} ${activeTheme.classes.textColor}`} onClick={e => e.stopPropagation()}>
+        {/* Card fills the wrapper and sets up flex column layout */}
+        <Card className="h-full flex flex-col">
+          <h3 className={`text-xl font-bold ${activeTheme.classes.textHeading} mb-4 flex-shrink-0`}>Generate Master Order List</h3>
           
           <div className="flex flex-col sm:flex-row gap-4 mb-4 flex-shrink-0">
             <div>
-              <label className="block text-sm font-medium text-muted mb-1">Start Date</label>
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full bg-light border border-medium rounded-md p-2 focus:ring-2 focus:ring-black focus:outline-none transition"/>
+              <label className={`block text-sm font-medium ${activeTheme.classes.textMuted} mb-1`}>Start Date</label>
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className={inputClasses}/>
             </div>
             <div>
-              <label className="block text-sm font-medium text-muted mb-1">End Date</label>
-              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full bg-light border border-medium rounded-md p-2 focus:ring-2 focus:ring-black focus:outline-none transition"/>
+              <label className={`block text-sm font-medium ${activeTheme.classes.textMuted} mb-1`}>End Date</label>
+              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className={inputClasses}/>
             </div>
              <button onClick={onClearMasterOrderPlan} className="self-end bg-yellow-500 text-white text-xs font-bold py-2 px-3 rounded-md hover:bg-yellow-600 transition">
                 Clear Manually Added Items
             </button>
           </div>
           
-          <div className="flex-grow overflow-y-auto mb-4 border-t border-b border-medium py-4">
-            <table className="w-full text-left">
-              <thead className="sticky top-0 bg-white text-muted">
-                <tr>
-                  <th className="p-3">Ingredient</th>
-                  <th className="p-3">Total Quantity</th>
-                  <th className="p-3">Unit</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-medium">
-                {masterList.map((item, index) => (
-                  <tr key={index} className="hover:bg-light">
-                    <td className="p-3">{item.name}</td>
-                    <td className="p-3">{item.quantity}</td>
-                    <td className="p-3">{item.unit}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* List container grows to fill all available space */}
+          <div className={`flex-grow overflow-y-auto mb-4 border-t border-b py-4 ${activeTheme.classes.inputBorder}`}>
+            {masterList.length > 0 ? (
+                <table className="w-full text-left">
+                <thead className={`sticky top-0 ${activeTheme.classes.cardBg} ${activeTheme.classes.textMuted} z-10`}>
+                    <tr>
+                    <th className="p-3">Ingredient</th>
+                    <th className="p-3">Total Quantity</th>
+                    <th className="p-3">Unit</th>
+                    </tr>
+                </thead>
+                <tbody className={`divide-y ${activeTheme.classes.inputBorder}`}>
+                    {masterList.map((item, index) => (
+                    <tr key={index} className="hover:bg-light">
+                        <td className="p-3">{item.name}</td>
+                        <td className="p-3">{item.quantity}</td>
+                        <td className="p-3">{item.unit}</td>
+                    </tr>
+                    ))}
+                </tbody>
+                </table>
+            ) : (
+                <div className="flex items-center justify-center h-full text-muted">
+                    <p>No items in the list for this date range.</p>
+                </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 mb-6 flex-shrink-0">
-            <input type="text" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} placeholder="Add Manual Item" className="sm:col-span-2 bg-light border border-medium rounded-md p-2 focus:ring-2 focus:ring-black focus:outline-none transition" />
-            <input type="text" value={newItem.quantity} onChange={e => setNewItem({...newItem, quantity: e.target.value})} placeholder="Qty" className="bg-light border border-medium rounded-md p-2 focus:ring-2 focus:ring-black focus:outline-none transition" />
-            <input type="text" value={newItem.unit} onChange={e => setNewItem({...newItem, unit: e.target.value})} placeholder="Unit" className="bg-light border border-medium rounded-md p-2 focus:ring-2 focus:ring-black focus:outline-none transition" />
-            <button onClick={handleAddNewItem} className="sm:col-span-4 bg-black text-white font-bold py-2 px-4 rounded-md hover:bg-gray-800 transition">Add Item</button>
+            <input type="text" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} placeholder="Add Manual Item" className={`sm:col-span-2 ${inputClasses}`} />
+            <input type="text" value={newItem.quantity} onChange={e => setNewItem({...newItem, quantity: e.target.value})} placeholder="Qty" className={inputClasses} />
+            <input type="text" value={newItem.unit} onChange={e => setNewItem({...newItem, unit: e.target.value})} placeholder="Unit" className={inputClasses} />
+            <button onClick={handleAddNewItem} className="sm:col-span-4 bg-primary text-white font-bold py-2 px-4 rounded-md hover:bg-primary-dark transition">Add Item</button>
           </div>
           
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4 flex-shrink-0">
             <div className="flex flex-wrap gap-2">
-                <button onClick={handleCopyToClipboard} className="bg-medium text-dark font-bold py-2 px-4 rounded-md hover:bg-gray-300 transition flex items-center">
+                <button onClick={handleCopyToClipboard} className={`bg-medium ${activeTheme.classes.textColor} font-bold py-2 px-4 rounded-md hover:bg-gray-300 transition flex items-center`}>
                     <Icon name={copied ? 'check' : 'copy'} className="h-5 w-5 mr-2" />
                     {copied ? 'Copied!' : 'Copy'}
                 </button>
-                <button onClick={handleExportCSV} className="bg-medium text-dark font-bold py-2 px-4 rounded-md hover:bg-gray-300 transition flex items-center">
+                <button onClick={handleExportCSV} className={`bg-medium ${activeTheme.classes.textColor} font-bold py-2 px-4 rounded-md hover:bg-gray-300 transition flex items-center`}>
                     <Icon name="download" className="h-5 w-5 mr-2" />
                     CSV
                 </button>
-                 <button onClick={handleEmailOrder} className="bg-medium text-dark font-bold py-2 px-4 rounded-md hover:bg-gray-300 transition flex items-center">
+                 <button onClick={handleEmailOrder} className={`bg-medium ${activeTheme.classes.textColor} font-bold py-2 px-4 rounded-md hover:bg-gray-300 transition flex items-center`}>
                     <Icon name="mail" className="h-5 w-5 mr-2" />
                     Email
                 </button>

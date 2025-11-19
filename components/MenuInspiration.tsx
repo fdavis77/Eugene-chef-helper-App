@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { getMenuInspiration, getIngredientList } from '../services/geminiService';
 import { Card } from './common/Card';
@@ -9,6 +10,7 @@ import MasterOrderListModal from './MasterOrderListModal';
 import RecipeFolderModal from './RecipeFolderModal';
 import { MarkdownRenderer } from './common/MarkdownRenderer';
 import { stripMarkdown } from '../utils/text';
+import { useTheme } from '../contexts/ThemeContext';
 import type { Ingredient, Recipe, CalendarDay, Note, CalendarView, EmailClient } from '../types';
 
 interface MenuInspirationProps {
@@ -22,7 +24,9 @@ interface MenuInspirationProps {
   onAddToMasterOrderPlan: (items: Ingredient[]) => void;
   onClearMasterOrderPlan: () => void;
   emailClient: EmailClient;
-  visionRecipes: Recipe[];
+  savedRecipes: Recipe[];
+  onSaveRecipe: (recipe: Recipe) => void;
+  onDeleteRecipe: (id: string) => void;
 }
 
 const EditDayModal: React.FC<{
@@ -37,6 +41,7 @@ const EditDayModal: React.FC<{
     const [newRotaEntry, setNewRotaEntry] = useState('');
     const [orderingList, setOrderingList] = useState(dayData?.orderingList || []);
     const [newOrderItem, setNewOrderItem] = useState({ name: '', quantity: '', unit: '' });
+    const { activeTheme } = useTheme();
 
     useEffect(() => {
         setMenuItem(dayData?.menuItem || '');
@@ -77,32 +82,34 @@ const EditDayModal: React.FC<{
     const formattedDate = new Date(date).toLocaleDateString(undefined, {
       year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC'
     });
+    
+    const inputClasses = `w-full border rounded-md p-2 focus:ring-2 focus:ring-primary focus:outline-none transition ${activeTheme.classes.inputBg} ${activeTheme.classes.inputText} ${activeTheme.classes.inputBorder} ${activeTheme.classes.placeholderText}`;
 
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={onClose}>
-            <div className="w-full max-w-2xl bg-white rounded-2xl" onClick={e => e.stopPropagation()}>
+            <div className={`w-full max-w-2xl rounded-2xl ${activeTheme.classes.appBg} ${activeTheme.classes.textColor}`} onClick={e => e.stopPropagation()}>
                 <Card className="max-h-[90vh] overflow-y-auto">
-                    <h3 className="text-lg font-bold text-dark mb-4">Edit Plan for {formattedDate}</h3>
+                    <h3 className={`text-lg font-bold ${activeTheme.classes.textHeading} mb-4`}>Edit Plan for {formattedDate}</h3>
                     <div className="space-y-6">
                         {/* Menu Item */}
                         <div>
-                            <label className="block text-sm font-medium text-muted mb-1">Menu Item</label>
+                            <label className={`block text-sm font-medium ${activeTheme.classes.textMuted} mb-1`}>Menu Item</label>
                             <input
                                 type="text"
                                 value={menuItem}
                                 onChange={e => setMenuItem(e.target.value)}
                                 placeholder="e.g., Pan-Seared Scallops"
-                                className="w-full bg-light border border-medium rounded-md p-2 focus:ring-2 focus:ring-black focus:outline-none transition"
+                                className={inputClasses}
                             />
                         </div>
                         
                         {/* Staff Rota */}
                         <div>
-                            <label className="block text-sm font-medium text-muted mb-1">Staff Rota</label>
+                            <label className={`block text-sm font-medium ${activeTheme.classes.textMuted} mb-1`}>Staff Rota</label>
                             <div className="space-y-2 max-h-32 overflow-y-auto pr-2 mb-2">
                                 {rota.map((entry, index) => (
-                                    <div key={index} className="flex items-center justify-between bg-light p-2 rounded-md">
-                                        <span className="text-dark">{entry}</span>
+                                    <div key={index} className={`flex items-center justify-between p-2 rounded-md ${activeTheme.classes.inputBg}`}>
+                                        <span className={activeTheme.classes.inputText}>{entry}</span>
                                         <button onClick={() => handleRemoveRota(index)} className="text-red-500 hover:text-red-700 p-1">
                                             <Icon name="delete" className="h-4 w-4" />
                                         </button>
@@ -115,24 +122,24 @@ const EditDayModal: React.FC<{
                                     value={newRotaEntry}
                                     onChange={e => setNewRotaEntry(e.target.value)}
                                     placeholder="Add new rota entry..."
-                                    className="flex-grow bg-light border border-medium rounded-md p-2 focus:ring-2 focus:ring-black focus:outline-none transition"
+                                    className={`flex-grow ${inputClasses}`}
                                 />
-                                <button onClick={handleAddRota} className="bg-black text-white font-bold py-2 px-4 rounded-md hover:bg-gray-800 transition">Add</button>
+                                <button onClick={handleAddRota} className="bg-primary text-white font-bold py-2 px-4 rounded-md hover:bg-primary-dark transition">Add</button>
                             </div>
                         </div>
 
                         {/* Ordering List */}
                         <div>
-                            <label className="block text-sm font-medium text-muted mb-1 flex items-center">
+                            <label className={`block text-sm font-medium ${activeTheme.classes.textMuted} mb-1 flex items-center`}>
                                 <Icon name="clipboard-list" className="h-5 w-5 mr-2" />
                                 Ordering List
                             </label>
                             <div className="space-y-2 max-h-40 overflow-y-auto pr-2 mb-2">
                                 {orderingList.map((item, index) => (
-                                    <div key={index} className="grid grid-cols-3 gap-2 items-center bg-light p-2 rounded-md">
-                                        <span className="text-dark col-span-2">{item.name}</span>
+                                    <div key={index} className={`grid grid-cols-3 gap-2 items-center p-2 rounded-md ${activeTheme.classes.inputBg}`}>
+                                        <span className={`${activeTheme.classes.inputText} col-span-2`}>{item.name}</span>
                                         <div className="flex justify-between items-center">
-                                            <span className="text-muted">{item.quantity} {item.unit}</span>
+                                            <span className={activeTheme.classes.textMuted}>{item.quantity} {item.unit}</span>
                                             <button onClick={() => handleRemoveOrderItem(index)} className="text-red-500 hover:text-red-700 p-1">
                                                 <Icon name="delete" className="h-4 w-4" />
                                             </button>
@@ -141,15 +148,15 @@ const EditDayModal: React.FC<{
                                 ))}
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-                                <input type="text" value={newOrderItem.name} onChange={e => setNewOrderItem({...newOrderItem, name: e.target.value})} placeholder="Item Name" className="sm:col-span-2 bg-light border border-medium rounded-md p-2 focus:ring-2 focus:ring-black focus:outline-none transition" />
-                                <input type="text" value={newOrderItem.quantity} onChange={e => setNewOrderItem({...newOrderItem, quantity: e.target.value})} placeholder="Qty" className="bg-light border border-medium rounded-md p-2 focus:ring-2 focus:ring-black focus:outline-none transition" />
-                                <input type="text" value={newOrderItem.unit} onChange={e => setNewOrderItem({...newOrderItem, unit: e.target.value})} placeholder="Unit" className="bg-light border border-medium rounded-md p-2 focus:ring-2 focus:ring-black focus:outline-none transition" />
-                                <button onClick={handleAddOrderItem} className="sm:col-span-4 bg-black text-white font-bold py-2 px-4 rounded-md hover:bg-gray-800 transition">Add Item</button>
+                                <input type="text" value={newOrderItem.name} onChange={e => setNewOrderItem({...newOrderItem, name: e.target.value})} placeholder="Item Name" className={`sm:col-span-2 ${inputClasses}`} />
+                                <input type="text" value={newOrderItem.quantity} onChange={e => setNewOrderItem({...newOrderItem, quantity: e.target.value})} placeholder="Qty" className={inputClasses} />
+                                <input type="text" value={newOrderItem.unit} onChange={e => setNewOrderItem({...newOrderItem, unit: e.target.value})} placeholder="Unit" className={inputClasses} />
+                                <button onClick={handleAddOrderItem} className="sm:col-span-4 bg-primary text-white font-bold py-2 px-4 rounded-md hover:bg-primary-dark transition">Add Item</button>
                             </div>
                         </div>
                     </div>
                     <div className="mt-6 flex justify-end gap-3">
-                        <button onClick={onClose} className="bg-medium text-dark font-bold py-2 px-4 rounded-md hover:bg-gray-300 transition">Cancel</button>
+                        <button onClick={onClose} className={`bg-medium ${activeTheme.classes.textColor} font-bold py-2 px-4 rounded-md hover:bg-gray-300 transition`}>Cancel</button>
                         <button onClick={handleSave} className="bg-green-500 text-white font-bold py-2 px-4 rounded-md hover:bg-green-600 transition">Save Changes</button>
                     </div>
                 </Card>
@@ -159,7 +166,7 @@ const EditDayModal: React.FC<{
 };
 
 
-const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, onDeleteNote, plannedItems, onUpdateCalendar, onRemoveRotaEntry, masterOrderPlan, onAddToMasterOrderPlan, onClearMasterOrderPlan, emailClient, visionRecipes }) => {
+const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, onDeleteNote, plannedItems, onUpdateCalendar, onRemoveRotaEntry, masterOrderPlan, onAddToMasterOrderPlan, onClearMasterOrderPlan, emailClient, savedRecipes, onSaveRecipe, onDeleteRecipe }) => {
   const [prompt, setPrompt] = useState<string>('');
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
@@ -169,6 +176,7 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
   const [unitSystem, setUnitSystem] = useState<'metric' | 'imperial'>('metric');
   const [isListCopied, setIsListCopied] = useState(false);
   const [isAddedToPlan, setIsAddedToPlan] = useState(false);
+  const [isRecipeSaved, setIsRecipeSaved] = useState(false);
 
   const [calendarDate, setCalendarDate] = useState(new Date());
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
@@ -178,6 +186,7 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
   const [editingNote, setEditingNote] = useState<{ id: string, content: string } | null>(null);
   const [calendarView, setCalendarView] = useState<CalendarView>('Month');
   const isInitialMount = useRef(true);
+  const { activeTheme } = useTheme();
 
   // Effect to automatically re-fetch the recipe when the unit system changes.
   useEffect(() => {
@@ -188,7 +197,6 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
       }
 
       // Only re-fetch if there's an existing recipe and a prompt to work with.
-      // This prevents firing an API call if the user just toggles the units before generating anything.
       if (recipe && prompt) {
           const refetchWithNewUnits = async () => {
               setIsLoadingRecipe(true);
@@ -222,6 +230,7 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
     setError('');
     setRecipe(null);
     setIngredients([]);
+    setIsRecipeSaved(false);
     setIsLoadingRecipe(true);
     try {
       const generatedRecipe = await getMenuInspiration(prompt, unitSystem);
@@ -269,6 +278,14 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
       });
     }
   };
+
+  const handleSaveCurrentRecipe = () => {
+      if (recipe) {
+          onSaveRecipe(recipe);
+          setIsRecipeSaved(true);
+          setTimeout(() => setIsRecipeSaved(false), 2000);
+      }
+  }
   
   const handleEditNote = (note: Note) => {
     setEditingNote({ id: note.id, content: note.content });
@@ -363,6 +380,8 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
         return null;
     }
   }
+  
+  const noteInputClasses = `w-full border rounded-md p-2 mb-2 focus:ring-2 focus:ring-primary focus:outline-none transition ${activeTheme.classes.inputBg} ${activeTheme.classes.inputText} ${activeTheme.classes.inputBorder} ${activeTheme.classes.placeholderText}`;
 
   return (
     <>
@@ -384,26 +403,28 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
       <RecipeFolderModal
         isOpen={isRecipeFolderOpen}
         onClose={() => setIsRecipeFolderOpen(false)}
-        recipes={visionRecipes}
+        recipes={savedRecipes}
+        onDeleteRecipe={onDeleteRecipe}
+        onSaveRecipe={onSaveRecipe}
       />
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left Column */}
         <div className="space-y-6">
           <Card>
-            <h2 className="text-xl font-bold text-dark mb-4 flex items-center">
+            <h2 className={`text-xl font-bold ${activeTheme.classes.textHeading} mb-4 flex items-center`}>
                 <Icon name="idea" className="h-6 w-6 mr-2" />
                 Menu & Recipe Inspiration
             </h2>
-            <p className="text-muted mb-4">Describe a dish concept, key ingredient, or culinary theme to generate a unique recipe.</p>
+            <p className={`${activeTheme.classes.textMuted} mb-4`}>Describe a dish concept, key ingredient, or culinary theme to generate a unique recipe.</p>
             
             <div className="mb-4">
-                <label className="text-muted font-medium mr-4 block sm:inline mb-2 sm:mb-0">Measurement System:</label>
+                <label className={`${activeTheme.classes.textMuted} font-medium mr-4 block sm:inline mb-2 sm:mb-0`}>Measurement System:</label>
                 <div className="inline-flex rounded-md shadow-sm bg-medium p-1" role="group">
                     <button
                         type="button"
                         onClick={() => setUnitSystem('metric')}
-                        className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-200 focus:z-10 focus:ring-2 focus:ring-black ${
-                            unitSystem === 'metric' ? "bg-black text-white" : 'text-muted hover:bg-gray-200'
+                        className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-200 focus:z-10 focus:ring-2 focus:ring-primary ${
+                            unitSystem === 'metric' ? "bg-primary text-white" : 'text-muted hover:bg-gray-200'
                         }`}
                     >
                         UK/EU (Metric)
@@ -411,8 +432,8 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
                     <button
                         type="button"
                         onClick={() => setUnitSystem('imperial')}
-                        className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-200 focus:z-10 focus:ring-2 focus:ring-black ${
-                            unitSystem === 'imperial' ? "bg-black text-white" : 'text-muted hover:bg-gray-200'
+                        className={`px-4 py-2 text-sm font-medium rounded-md transition-colors duration-200 focus:z-10 focus:ring-2 focus:ring-primary ${
+                            unitSystem === 'imperial' ? "bg-primary text-white" : 'text-muted hover:bg-gray-200'
                         }`}
                     >
                         USA (Imperial)
@@ -425,13 +446,13 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder="e.g., A modern spring lamb dish with foraged herbs"
-                className="flex-grow bg-light border-medium text-dark placeholder:text-muted focus:ring-black border rounded-md p-3 focus:ring-2 focus:outline-none transition"
+                className={`flex-grow border rounded-md p-3 focus:ring-2 focus:outline-none transition ${activeTheme.classes.inputBg} ${activeTheme.classes.inputText} ${activeTheme.classes.inputBorder} ${activeTheme.classes.placeholderText}`}
                 rows={2}
               />
               <button
                 onClick={handleGetInspiration}
                 disabled={isLoadingRecipe}
-                className="bg-black text-white font-bold py-3 px-6 rounded-md hover:bg-gray-800 transition duration-300 disabled:bg-gray-500 flex items-center justify-center"
+                className="bg-primary text-white font-bold py-3 px-6 rounded-md hover:bg-primary-dark transition duration-300 disabled:bg-gray-500 flex items-center justify-center"
               >
                 {isLoadingRecipe ? <Loader /> : 'Get Inspired'}
               </button>
@@ -443,7 +464,7 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
             <Card>
               <div className="flex flex-col items-center justify-center p-8">
                 <Loader />
-                <p className="mt-4 text-muted">Crafting your recipe...</p>
+                <p className={`mt-4 ${activeTheme.classes.textMuted}`}>Crafting your recipe...</p>
               </div>
             </Card>
           )}
@@ -452,34 +473,45 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
             <>
               <Card className="flex flex-col">
                 <div className="flex-grow">
-                    <h3 className="text-xl font-bold text-dark mb-2">{recipe.title}</h3>
-                    <p className="text-muted italic mb-4">{recipe.description}</p>
+                    <div className="flex justify-between items-start mb-2">
+                        <h3 className={`text-xl font-bold ${activeTheme.classes.textHeading}`}>{recipe.title}</h3>
+                         <button
+                            onClick={handleSaveCurrentRecipe}
+                            disabled={isRecipeSaved}
+                            className={`bg-medium ${activeTheme.classes.textColor} hover:bg-gray-300 py-2 px-4 rounded-md transition-colors flex items-center text-sm font-bold`}
+                            title="Save to Recipe Folder"
+                        >
+                            <Icon name={isRecipeSaved ? 'check' : 'book'} className="h-4 w-4 mr-2" />
+                            {isRecipeSaved ? 'Saved' : 'Save to Folder'}
+                        </button>
+                    </div>
+                    <p className={`${activeTheme.classes.textMuted} italic mb-4`}>{recipe.description}</p>
                     
                     <div className="flex space-x-6 mb-6 text-sm">
                         <div>
-                            <p className="font-bold text-dark">Yields:</p>
-                            <p className="text-muted">{recipe.yields}</p>
+                            <p className={`font-bold ${activeTheme.classes.textColor}`}>Yields:</p>
+                            <p className={activeTheme.classes.textMuted}>{recipe.yields}</p>
                         </div>
                         <div>
-                            <p className="font-bold text-dark">Prep time:</p>
-                            <p className="text-muted">{recipe.prepTime}</p>
+                            <p className={`font-bold ${activeTheme.classes.textColor}`}>Prep time:</p>
+                            <p className={activeTheme.classes.textMuted}>{recipe.prepTime}</p>
                         </div>
                         <div>
-                            <p className="font-bold text-dark">Cook time:</p>
-                            <p className="text-muted">{recipe.cookTime}</p>
+                            <p className={`font-bold ${activeTheme.classes.textColor}`}>Cook time:</p>
+                            <p className={activeTheme.classes.textMuted}>{recipe.cookTime}</p>
                         </div>
                     </div>
 
                     <div className="space-y-6">
                         <div>
-                            <h4 className="font-semibold text-dark mb-2 border-b border-medium pb-1">Ingredients</h4>
-                            <ul className="list-disc list-inside space-y-1 text-muted pl-2">
+                            <h4 className={`font-semibold ${activeTheme.classes.textColor} mb-2 border-b pb-1 ${activeTheme.classes.inputBorder}`}>Ingredients</h4>
+                            <ul className={`list-disc list-inside space-y-1 ${activeTheme.classes.textMuted} pl-2`}>
                                 {recipe.ingredients.map((item, index) => <li key={index}>{item}</li>)}
                             </ul>
                         </div>
                         <div>
-                            <h4 className="font-semibold text-dark mb-2 border-b border-medium pb-1">Instructions</h4>
-                            <ol className="list-decimal list-inside space-y-3 text-muted pl-2">
+                            <h4 className={`font-semibold ${activeTheme.classes.textColor} mb-2 border-b pb-1 ${activeTheme.classes.inputBorder}`}>Instructions</h4>
+                            <ol className={`list-decimal list-inside space-y-3 ${activeTheme.classes.textMuted} pl-2`}>
                                 {recipe.instructions.map((step, index) => <li key={index}>{step}</li>)}
                             </ol>
                         </div>
@@ -489,7 +521,7 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
                     <button
                       onClick={handleGetIngredients}
                       disabled={isLoadingIngredients}
-                      className="w-full bg-black text-white font-bold py-3 px-6 rounded-md hover:bg-gray-800 transition duration-300 disabled:bg-gray-500 flex items-center justify-center"
+                      className="w-full bg-primary text-white font-bold py-3 px-6 rounded-md hover:bg-primary-dark transition duration-300 disabled:bg-gray-500 flex items-center justify-center"
                     >
                       {isLoadingIngredients ? <Loader /> : (
                           <>
@@ -515,29 +547,29 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
                   <Card>
                       <div className="flex flex-col items-center justify-center p-8">
                         <Loader />
-                        <p className="mt-4 text-muted">Analyzing recipe for ingredients...</p>
+                        <p className={`mt-4 ${activeTheme.classes.textMuted}`}>Analyzing recipe for ingredients...</p>
                     </div>
                   </Card>
               )}
 
               {ingredients.length > 0 && (
                 <Card>
-                  <h3 className="text-lg font-semibold text-dark mb-4">Ordering List for "{recipe.title}"</h3>
+                  <h3 className={`text-lg font-semibold ${activeTheme.classes.textHeading} mb-4`}>Ordering List for "{recipe.title}"</h3>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left">
-                        <thead className="bg-light text-muted">
+                        <thead className={`${activeTheme.classes.inputBg} ${activeTheme.classes.textMuted}`}>
                           <tr>
                             <th className="p-3">Ingredient</th>
                             <th className="p-3">Quantity</th>
                             <th className="p-3">Unit</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-medium">
+                        <tbody className={`divide-y ${activeTheme.classes.inputBorder}`}>
                           {ingredients.map((ing, index) => (
                             <tr key={index} className="hover:bg-light">
-                              <td className="p-3">{ing.name}</td>
-                              <td className="p-3">{ing.quantity}</td>
-                              <td className="p-3">{ing.unit}</td>
+                              <td className={`p-3 ${activeTheme.classes.textColor}`}>{ing.name}</td>
+                              <td className={`p-3 ${activeTheme.classes.textColor}`}>{ing.quantity}</td>
+                              <td className={`p-3 ${activeTheme.classes.textColor}`}>{ing.unit}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -554,14 +586,14 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
                       </button>
                       <button
                         onClick={handleCopySingleList}
-                        className="bg-medium text-dark font-bold py-2 px-4 rounded-md hover:bg-gray-300 transition flex items-center"
+                        className={`bg-medium ${activeTheme.classes.textColor} font-bold py-2 px-4 rounded-md hover:bg-gray-300 transition flex items-center`}
                       >
                         <Icon name={isListCopied ? 'check' : 'copy'} className="h-5 w-5 mr-2" />
                         {isListCopied ? 'Copied!' : 'Copy List'}
                       </button>
                       <button
                         onClick={handleDownloadSingleCSV}
-                        className="bg-medium text-dark font-bold py-2 px-4 rounded-md hover:bg-gray-300 transition flex items-center"
+                        className={`bg-medium ${activeTheme.classes.textColor} font-bold py-2 px-4 rounded-md hover:bg-gray-300 transition flex items-center`}
                       >
                         <Icon name="download" className="h-5 w-5 mr-2" />
                         Download as CSV
@@ -578,20 +610,20 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
           <Card>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                  <h3 className="text-lg font-semibold text-dark">Ordering Hub</h3>
-                  <p className="text-muted text-sm">Consolidate your ordering lists.</p>
+                  <h3 className={`text-lg font-semibold ${activeTheme.classes.textHeading}`}>Ordering Hub</h3>
+                  <p className={`${activeTheme.classes.textMuted} text-sm`}>Consolidate your ordering lists.</p>
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
                   <button 
                       onClick={() => setIsOrderModalOpen(true)}
-                      className="w-full bg-black text-white font-bold py-2 px-4 rounded-md hover:bg-gray-800 transition duration-300 flex items-center justify-center text-sm"
+                      className="w-full bg-primary text-white font-bold py-2 px-4 rounded-md hover:bg-primary-dark transition duration-300 flex items-center justify-center text-sm"
                   >
                       <Icon name="clipboard-list" className="h-4 w-4 mr-2" />
                       Master List
                   </button>
                    <button 
                       onClick={() => setIsRecipeFolderOpen(true)}
-                      className="w-full bg-black text-white font-bold py-2 px-4 rounded-md hover:bg-gray-800 transition duration-300 flex items-center justify-center text-sm"
+                      className="w-full bg-primary text-white font-bold py-2 px-4 rounded-md hover:bg-primary-dark transition duration-300 flex items-center justify-center text-sm"
                   >
                       <Icon name="book" className="h-4 w-4 mr-2" />
                       Recipe Folder
@@ -602,15 +634,15 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
           
           <Card>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
-              <h3 className="text-lg font-semibold text-dark mb-2 sm:mb-0">Menu & Rota Planner</h3>
+              <h3 className={`text-lg font-semibold ${activeTheme.classes.textHeading} mb-2 sm:mb-0`}>Menu & Rota Planner</h3>
               <div className="inline-flex rounded-md shadow-sm bg-medium p-1" role="group">
                 {(['Month', 'Agenda'] as CalendarView[]).map(view => (
                   <button
                     key={view}
                     type="button"
                     onClick={() => setCalendarView(view)}
-                    className={`px-3 py-1.5 text-sm font-medium transition-colors duration-200 focus:z-10 focus:ring-2 focus:ring-black first:rounded-md last:rounded-md flex items-center gap-2 ${
-                      calendarView === view ? "bg-black text-white" : 'text-muted hover:text-dark'
+                    className={`px-3 py-1.5 text-sm font-medium transition-colors duration-200 focus:z-10 focus:ring-2 focus:ring-primary first:rounded-md last:rounded-md flex items-center gap-2 ${
+                      calendarView === view ? "bg-primary text-white" : `text-muted hover:${activeTheme.classes.textColor}`
                     }`}
                   >
                     <Icon name={view === 'Month' ? 'calendar-days' : 'list'} className="h-4 w-4" />
@@ -624,11 +656,11 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
 
           <Card>
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-dark">Plan for {formattedSelectedDate() || '...'}</h3>
+              <h3 className={`text-lg font-semibold ${activeTheme.classes.textHeading}`}>Plan for {formattedSelectedDate() || '...'}</h3>
               {selectedCalendarDate && (
                 <button 
                   onClick={() => setIsEditModalOpen(true)}
-                  className="bg-medium text-dark hover:bg-gray-300 px-3 py-1 rounded-md text-sm font-medium flex items-center transition-colors"
+                  className={`bg-medium ${activeTheme.classes.textColor} hover:bg-gray-300 px-3 py-1 rounded-md text-sm font-medium flex items-center transition-colors`}
                 >
                   <Icon name="edit" className="h-4 w-4 mr-2" />
                   Edit Plan
@@ -637,28 +669,28 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
             </div>
             {selectedCalendarDate ? (
                 <div>
-                    <h4 className="font-semibold text-muted">Menu Item:</h4>
-                    <p className="text-dark mb-3 pl-2">{plannedItems[selectedCalendarDate]?.menuItem || 'Not set'}</p>
-                    <h4 className="font-semibold text-muted">Staff Rota:</h4>
+                    <h4 className={`font-semibold ${activeTheme.classes.textMuted}`}>Menu Item:</h4>
+                    <p className={`mb-3 pl-2 ${activeTheme.classes.textColor}`}>{plannedItems[selectedCalendarDate]?.menuItem || 'Not set'}</p>
+                    <h4 className={`font-semibold ${activeTheme.classes.textMuted}`}>Staff Rota:</h4>
                     <div className="space-y-2 mt-1 max-h-24 overflow-y-auto pr-2">
                         {(plannedItems[selectedCalendarDate]?.rota?.length ?? 0) > 0 ? (
                             plannedItems[selectedCalendarDate]!.rota!.map((entry, index) => (
-                                <div key={index} className="flex items-center justify-between bg-light p-2 rounded-md">
-                                    <span className="text-dark">{entry}</span>
+                                <div key={index} className={`flex items-center justify-between p-2 rounded-md ${activeTheme.classes.inputBg}`}>
+                                    <span className={activeTheme.classes.inputText}>{entry}</span>
                                 </div>
                             ))
                         ) : (
-                            <p className="text-muted pl-2">No staff assigned for this day.</p>
+                            <p className={`${activeTheme.classes.textMuted} pl-2`}>No staff assigned for this day.</p>
                         )}
                     </div>
                 </div>
             ) : (
-                <p className="text-muted">Select a day on the calendar to view and edit the plan.</p>
+                <p className={activeTheme.classes.textMuted}>Select a day on the calendar to view and edit the plan.</p>
             )}
           </Card>
 
           <Card>
-            <h3 className="text-lg font-semibold text-dark mb-4 flex items-center">
+            <h3 className={`text-lg font-semibold ${activeTheme.classes.textHeading} mb-4 flex items-center`}>
               <Icon name="notebook" className="h-5 w-5 mr-2" />
               Chef's Notes
             </h3>
@@ -667,7 +699,7 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
                 notes.map((note) => (
                   <div 
                     key={note.id} 
-                    className="bg-light p-3 rounded-lg border border-medium cursor-grab active:cursor-grabbing"
+                    className={`p-3 rounded-lg border cursor-grab active:cursor-grabbing ${activeTheme.classes.inputBg} ${activeTheme.classes.inputBorder}`}
                     draggable="true"
                     onDragStart={(e) => handleNoteDragStart(e, note.content)}
                   >
@@ -679,15 +711,15 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
                         <textarea
                           value={editingNote.content}
                           onChange={(e) => setEditingNote({ ...editingNote, content: e.target.value })}
-                          className="w-full bg-white border border-medium rounded-md p-2 mb-2 focus:ring-2 focus:ring-black focus:outline-none transition"
+                          className={noteInputClasses}
                           rows={3}
                           autoFocus
                         />
                         <div className="flex justify-end gap-2">
-                          <button onClick={handleCancelEdit} title="Cancel" className="text-muted hover:text-dark p-2 rounded-full transition-colors">
+                          <button onClick={handleCancelEdit} title="Cancel" aria-label="Cancel editing note" className={`${activeTheme.classes.textMuted} hover:${activeTheme.classes.textColor} p-2 rounded-full transition-colors`}>
                             <Icon name="x-circle" className="h-5 w-5" />
                           </button>
-                          <button onClick={handleSaveNote} title="Save Note" className="text-green-500 hover:text-green-700 p-2 rounded-full transition-colors">
+                          <button onClick={handleSaveNote} title="Save Note" aria-label="Save note changes" className="text-green-500 hover:text-green-700 p-2 rounded-full transition-colors">
                             <Icon name="check" className="h-5 w-5" />
                           </button>
                         </div>
@@ -701,13 +733,13 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
                             />
                         </div>
                         <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => handleConvertToRecipe(note.content)} title="Convert to Recipe" className="text-primary hover:text-primary-dark p-2 rounded-full transition-colors">
+                          <button onClick={() => handleConvertToRecipe(note.content)} title="Convert to Recipe" aria-label="Convert note to recipe" className="text-primary hover:text-primary-dark p-2 rounded-full transition-colors">
                             <Icon name="idea" className="h-5 w-5" />
                           </button>
-                          <button onClick={() => handleEditNote(note)} title="Edit Note" className="text-muted hover:text-dark p-2 rounded-full transition-colors">
+                          <button onClick={() => handleEditNote(note)} title="Edit Note" aria-label="Edit note" className={`${activeTheme.classes.textMuted} hover:${activeTheme.classes.textColor} p-2 rounded-full transition-colors`}>
                             <Icon name="edit" className="h-5 w-5" />
                           </button>
-                          <button onClick={() => onDeleteNote(note.id)} title="Delete Note" className="text-red-500 hover:text-red-400 p-2 rounded-full transition-colors">
+                          <button onClick={() => onDeleteNote(note.id)} title="Delete Note" aria-label="Delete note" className="text-red-500 hover:text-red-400 p-2 rounded-full transition-colors">
                             <Icon name="delete" className="h-5 w-5" />
                           </button>
                         </div>
@@ -716,8 +748,10 @@ const MenuInspiration: React.FC<MenuInspirationProps> = ({ notes, onUpdateNote, 
                   </div>
                 ))
               ) : (
-                <div className="text-center py-8 text-muted">
-                    <p>Notes added via the Chef Bot will appear here.</p>
+                <div className={`text-center py-8 rounded-lg ${activeTheme.classes.textMuted} ${activeTheme.classes.inputBg}`}>
+                    <Icon name="notebook" className="h-10 w-10 mx-auto text-gray-400" />
+                    <h4 className={`mt-2 text-md font-semibold ${activeTheme.classes.textColor}`}>No Notes Yet</h4>
+                    <p className="text-sm">Use the <span className="font-bold">Chef Bot</span> to add notes, ideas, and reminders.</p>
                 </div>
               )}
             </div>

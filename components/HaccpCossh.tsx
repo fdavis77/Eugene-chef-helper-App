@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Card } from './common/Card';
 import { Icon } from './common/Icon';
 import { Loader } from './common/Loader';
-import { getHaccpInfo, getSafetyAudit, getStockTakeSummary } from '../services/geminiService';
-import type { HaccpLog, TemperatureLog, OpeningClosingCheck, CoolingLog, CosshLog, ProbeCalibrationLog, StockTake, StockItem, RecentlyDeletedItem } from '../types';
+import { getHaccpInfo, getSafetyAudit } from '../services/geminiService';
+import { useTheme } from '../contexts/ThemeContext';
+import type { HaccpLog, TemperatureLog, OpeningClosingCheck, CoolingLog, CosshLog, ProbeCalibrationLog, RecentlyDeletedItem } from '../types';
 import { MarkdownRenderer } from './common/MarkdownRenderer';
 
 interface HaccpCosshProps {
@@ -28,11 +29,6 @@ interface HaccpCosshProps {
     onAddProbeCalibrationLog: (logData: Omit<ProbeCalibrationLog, 'id'>) => void;
     onUpdateProbeCalibrationLog: (log: ProbeCalibrationLog) => void;
     onDeleteProbeCalibrationLog: (id: number) => void;
-    stockTakes: StockTake[];
-    onAddStockTake: (stockTake: Omit<StockTake, 'id'>) => void;
-    onUpdateStockTake: (stockTake: StockTake) => void;
-    onDeleteStockTake: (id: number) => void;
-    onDeleteStockItem: (stockTakeId: number, itemId: number) => void;
     recentlyDeletedItem: RecentlyDeletedItem | null;
     onRestoreLog: () => void;
 }
@@ -44,47 +40,117 @@ const TABS = [
     { id: 'cooling', label: 'Cooling Logs' },
     { id: 'calibration', label: 'Probe Calibration' },
     { id: 'cossh', label: 'COSHH Register' },
-    { id: 'stockTake', label: 'Stock Take' },
     { id: 'monthlyReport', label: 'Monthly Report'},
     { id: 'audit', label: 'AI Safety Audit' },
     { id: 'guidance', label: 'Guidance' },
 ];
 
-const downloadCSV = (data: any[], filename: string) => {
+type ExportFormat = 'csv' | 'excel' | 'clipboard';
+
+const exportData = (data: any[], filename: string, format: ExportFormat) => {
     if (data.length === 0) {
-        alert("No data to download.");
+        alert("No data to export.");
         return;
     }
 
     const headers = Object.keys(data[0]);
     
-    let csv = data.map(row => 
-        headers.map(fieldName => {
-            let cellData = row[fieldName];
-             if (cellData === null || cellData === undefined) {
-                cellData = '';
-            } else if (typeof cellData === 'object') {
-                cellData = JSON.stringify(cellData).replace(/"/g, '""');
-            }
-            const stringData = String(cellData).replace(/"/g, '""');
-            return `"${stringData}"`;
-        }).join(',')
+    // Helper to format a cell for CSV/Excel
+    const formatCell = (cell: any) => {
+        if (cell === null || cell === undefined) return '';
+        if (typeof cell === 'object') return JSON.stringify(cell).replace(/"/g, '""');
+        return String(cell).replace(/"/g, '""');
+    };
+
+    // Helper to format for Clipboard (TSV)
+    const formatCellTSV = (cell: any) => {
+        if (cell === null || cell === undefined) return '';
+        if (typeof cell === 'object') return JSON.stringify(cell);
+        // Remove newlines and tabs to prevent breaking the grid paste
+        return String(cell).replace(/[\t\n\r]/g, ' ');
+    };
+
+    if (format === 'clipboard') {
+        const tsvRows = data.map(row => 
+            headers.map(fieldName => formatCellTSV(row[fieldName])).join('\t')
+        );
+        const tsvString = [headers.join('\t'), ...tsvRows].join('\n');
+        
+        navigator.clipboard.writeText(tsvString).then(() => {
+            alert("Data copied to clipboard! Ready to paste into Google Sheets or Excel.");
+        }).catch(err => {
+            console.error('Failed to copy: ', err);
+            alert("Failed to copy to clipboard.");
+        });
+        return;
+    }
+
+    const csvRows = data.map(row => 
+        headers.map(fieldName => `"${formatCell(row[fieldName])}"`).join(',')
     );
 
-    csv.unshift(headers.join(','));
-    const csvString = csv.join('\r\n');
+    const csvContent = [headers.join(','), ...csvRows].join('\r\n');
     
-    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    // Add BOM for Excel compatibility if requested
+    const blobData = format === 'excel' ? '\uFEFF' + csvContent : csvContent;
+    const blob = new Blob([blobData], { type: 'text/csv;charset=utf-8;' });
+    
     const link = document.createElement("a");
-    if (link.download !== undefined) {
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        link.setAttribute("download", `${filename}_${new Date().toISOString().split('T')[0]}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `${filename}_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+
+const ExportMenu: React.FC<{ onExport: (format: ExportFormat) => void, activeTheme: any }> = ({ onExport, activeTheme }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const menuRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    return (
+        <div className="relative" ref={menuRef}>
+            <button 
+                onClick={() => setIsOpen(!isOpen)} 
+                className={`bg-medium ${activeTheme.classes.textColor} font-bold py-2 px-4 rounded-full hover:bg-gray-300 transition text-sm flex items-center`}
+                title="Export Data"
+            >
+                <Icon name="download" className="h-4 w-4 mr-2" />
+                Export
+                <Icon name="chevron-right" className={`h-3 w-3 ml-2 transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`} />
+            </button>
+            {isOpen && (
+                <div className={`absolute right-0 top-full mt-2 w-56 rounded-lg shadow-xl border z-20 ${activeTheme.classes.cardBg} ${activeTheme.classes.cardBorder} overflow-hidden`}>
+                    <div className={`px-4 py-2 text-xs font-semibold uppercase tracking-wider ${activeTheme.classes.textMuted} bg-black/5 border-b ${activeTheme.classes.inputBorder}`}>
+                        Download Options
+                    </div>
+                    <button onClick={() => { onExport('csv'); setIsOpen(false); }} className={`w-full text-left px-4 py-3 text-sm hover:bg-black/5 ${activeTheme.classes.textColor} flex items-center gap-2`}>
+                        <span className="font-mono text-xs bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">CSV</span>
+                        Standard CSV
+                    </button>
+                    <button onClick={() => { onExport('excel'); setIsOpen(false); }} className={`w-full text-left px-4 py-3 text-sm hover:bg-black/5 ${activeTheme.classes.textColor} flex items-center gap-2 border-t ${activeTheme.classes.inputBorder}`}>
+                         <span className="font-mono text-xs bg-green-100 text-green-800 px-1.5 py-0.5 rounded">XLS</span>
+                         Excel Compatible
+                    </button>
+                    <button onClick={() => { onExport('clipboard'); setIsOpen(false); }} className={`w-full text-left px-4 py-3 text-sm hover:bg-black/5 ${activeTheme.classes.textColor} flex items-center gap-2 border-t ${activeTheme.classes.inputBorder}`}>
+                        <Icon name="copy" className="h-3 w-3" />
+                        Copy for Sheets
+                    </button>
+                </div>
+            )}
+        </div>
+    );
 };
 
 
@@ -95,7 +161,6 @@ const HaccpCossh: React.FC<HaccpCosshProps> = (props) => {
         coolingLogs, onAddCoolingLog, onUpdateCoolingLog, onDeleteCoolingLog,
         cosshLogs, onAddCosshLog, onUpdateCosshLog, onDeleteCosshLog,
         probeCalibrationLogs, onAddProbeCalibrationLog, onUpdateProbeCalibrationLog, onDeleteProbeCalibrationLog,
-        stockTakes, onAddStockTake, onUpdateStockTake, onDeleteStockTake, onDeleteStockItem,
         recentlyDeletedItem, onRestoreLog
     } = props;
     
@@ -106,16 +171,15 @@ const HaccpCossh: React.FC<HaccpCosshProps> = (props) => {
     const [isLoadingAudit, setIsLoadingAudit] = useState(false);
     const [error, setError] = useState('');
     const [activeTab, setActiveTab] = useState(TABS[0].id);
-
-    // State for Stock Take
-    const [selectedStockTakeDate, setSelectedStockTakeDate] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
-    const [newStockItem, setNewStockItem] = useState<Omit<StockItem, 'id'>>({ name: '', category: '', quantityOnHand: 0, unit: '', unitPrice: 0 });
-    const [stockSummary, setStockSummary] = useState('');
-    const [isLoadingStockSummary, setIsLoadingStockSummary] = useState(false);
+    const { activeTheme } = useTheme();
 
     // State for Monthly Report
     const [reportMonth, setReportMonth] = useState(new Date().getMonth() + 1);
     const [reportYear, setReportYear] = useState(new Date().getFullYear());
+    
+    const inputClasses = `w-full border rounded-md p-2 focus:ring-primary focus:ring-1 focus:outline-none ${activeTheme.classes.inputBg} ${activeTheme.classes.inputText} ${activeTheme.classes.inputBorder}`;
+    const thClasses = `p-3 ${activeTheme.classes.textMuted} uppercase`;
+    const tableHeaderClasses = `${activeTheme.classes.inputBg}`;
 
 
     const fridgeLogs = haccpLogs.filter(log => log.type === 'Fridge');
@@ -155,6 +219,11 @@ const HaccpCossh: React.FC<HaccpCosshProps> = (props) => {
             setIsLoadingAudit(false);
         }
     };
+
+    const handleNumericInputChange = (value: string) => {
+        // Allow numbers, decimals, and negative signs
+        return value.replace(/[^0-9.-]/g, '');
+    };
     
     // RENDER FUNCTIONS FOR EACH TAB
     const renderContent = () => {
@@ -165,7 +234,6 @@ const HaccpCossh: React.FC<HaccpCosshProps> = (props) => {
             case 'cooling': return renderCoolingLogs();
             case 'calibration': return renderProbeCalibration();
             case 'cossh': return renderCosshRegister();
-            case 'stockTake': return renderStockTake();
             case 'monthlyReport': return renderMonthlyReport();
             case 'audit': return renderAudit();
             case 'guidance': return renderGuidance();
@@ -186,57 +254,67 @@ const HaccpCossh: React.FC<HaccpCosshProps> = (props) => {
         });
       };
 
+      const EmptyState = () => (
+        <tr>
+            <td colSpan={12} className="text-center p-8 text-muted">
+                <Icon name="clipboard-check" className="h-10 w-10 mx-auto text-gray-400" />
+                <h4 className={`mt-2 text-md font-semibold ${activeTheme.classes.textColor}`}>No Daily Checks Logged</h4>
+                <p className="text-sm">Click 'New Opening' or 'New Closing' to add the first log.</p>
+            </td>
+        </tr>
+      );
+
       return (
         <Card>
           <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-dark">Daily Opening & Closing Checks</h3>
-              <div className="flex gap-2">
-                  <button onClick={() => downloadCSV(openingClosingLogs, 'daily_checks')} className="bg-medium text-dark font-bold py-2 px-4 rounded-full hover:bg-gray-300 transition text-sm flex items-center"><Icon name="download" className="h-4 w-4 mr-2" />CSV</button>
-                  <button onClick={() => handleAddCheck('Opening')} className="bg-black text-white font-bold py-2 px-4 rounded-full hover:bg-gray-800 transition text-sm flex items-center"><Icon name="add" className="h-4 w-4 mr-2" />New Opening</button>
-                  <button onClick={() => handleAddCheck('Closing')} className="bg-black text-white font-bold py-2 px-4 rounded-full hover:bg-gray-800 transition text-sm flex items-center"><Icon name="add" className="h-4 w-4 mr-2" />New Closing</button>
+              <h3 className={`text-lg font-semibold ${activeTheme.classes.textHeading}`}>Daily Opening & Closing Checks</h3>
+              <div className="flex gap-2 items-center">
+                  <ExportMenu onExport={(format) => exportData(openingClosingLogs, 'daily_checks', format)} activeTheme={activeTheme} />
+                  <button onClick={() => handleAddCheck('Opening')} className="bg-primary text-white font-bold py-2 px-4 rounded-full hover:bg-primary-dark transition text-sm flex items-center"><Icon name="add" className="h-4 w-4 mr-2" />New Opening</button>
+                  <button onClick={() => handleAddCheck('Closing')} className="bg-primary text-white font-bold py-2 px-4 rounded-full hover:bg-primary-dark transition text-sm flex items-center"><Icon name="add" className="h-4 w-4 mr-2" />New Closing</button>
               </div>
           </div>
-          <p className="text-muted mb-4 text-sm">Log checklists for opening and closing procedures.</p>
+          <p className={`${activeTheme.classes.textMuted} mb-4 text-sm`}>Log checklists for opening and closing procedures.</p>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-                <thead className="bg-light text-muted uppercase">
+                <thead className={tableHeaderClasses}>
                     <tr>
-                      <th className="p-3">Date</th>
-                      <th className="p-3">Time</th>
-                      <th className="p-3">Type</th>
-                      <th className="p-3">Kitchen Clean</th>
-                      <th className="p-3">Equipment OK</th>
-                      <th className="p-3">Temps OK</th>
-                      <th className="p-3">Staff Fit</th>
-                      <th className="p-3">Waste Managed</th>
-                      <th className="p-3">Pest Control</th>
-                      <th className="p-3">Comments</th>
-                      <th className="p-3">Signed</th>
-                      <th className="p-3"></th>
+                      <th className={thClasses}>Date</th>
+                      <th className={thClasses}>Time</th>
+                      <th className={thClasses}>Type</th>
+                      <th className={thClasses}>Kitchen Clean</th>
+                      <th className={thClasses}>Equipment OK</th>
+                      <th className={thClasses}>Temps OK</th>
+                      <th className={thClasses}>Staff Fit</th>
+                      <th className={thClasses}>Waste Managed</th>
+                      <th className={thClasses}>Pest Control</th>
+                      <th className={thClasses}>Comments</th>
+                      <th className={thClasses}>Signed</th>
+                      <th className={thClasses}></th>
                     </tr>
                 </thead>
-                <tbody className="divide-y divide-medium">
-                  {openingClosingLogs.map(log => (
+                <tbody className={`divide-y ${activeTheme.classes.inputBorder}`}>
+                  {openingClosingLogs.length > 0 ? openingClosingLogs.map(log => (
                     <tr key={log.id}>
-                      <td className="p-1"><input type="date" value={log.date} onChange={e => onUpdateOpeningClosingLog({...log, date: e.target.value})} className="w-full bg-white border rounded-md p-2"/></td>
-                      <td className="p-1"><input type="time" value={log.time} onChange={e => onUpdateOpeningClosingLog({...log, time: e.target.value})} className="w-full bg-white border rounded-md p-2"/></td>
+                      <td className="p-1"><input type="date" value={log.date} onChange={e => onUpdateOpeningClosingLog({...log, date: e.target.value})} className={inputClasses}/></td>
+                      <td className="p-1"><input type="time" value={log.time} onChange={e => onUpdateOpeningClosingLog({...log, time: e.target.value})} className={inputClasses}/></td>
                       <td className="p-1">
-                        <select value={log.type} onChange={e => onUpdateOpeningClosingLog({...log, type: e.target.value as 'Opening' | 'Closing'})} className="w-full bg-white border rounded-md p-2">
+                        <select value={log.type} onChange={e => onUpdateOpeningClosingLog({...log, type: e.target.value as 'Opening' | 'Closing'})} className={inputClasses}>
                             <option value="Opening">Opening</option>
                             <option value="Closing">Closing</option>
                         </select>
                       </td>
-                      <td className="p-1 text-center"><input type="checkbox" checked={log.checks.kitchenClean} onChange={e => onUpdateOpeningClosingLog({...log, checks: {...log.checks, kitchenClean: e.target.checked}})} className="h-5 w-5 rounded"/></td>
-                      <td className="p-1 text-center"><input type="checkbox" checked={log.checks.equipmentWorking} onChange={e => onUpdateOpeningClosingLog({...log, checks: {...log.checks, equipmentWorking: e.target.checked}})} className="h-5 w-5 rounded"/></td>
-                      <td className="p-1 text-center"><input type="checkbox" checked={log.checks.temperaturesCorrect} onChange={e => onUpdateOpeningClosingLog({...log, checks: {...log.checks, temperaturesCorrect: e.target.checked}})} className="h-5 w-5 rounded"/></td>
-                      <td className="p-1 text-center"><input type="checkbox" checked={log.checks.staffFitForWork} onChange={e => onUpdateOpeningClosingLog({...log, checks: {...log.checks, staffFitForWork: e.target.checked}})} className="h-5 w-5 rounded"/></td>
-                      <td className="p-1 text-center"><input type="checkbox" checked={log.checks.wasteManaged} onChange={e => onUpdateOpeningClosingLog({...log, checks: {...log.checks, wasteManaged: e.target.checked}})} className="h-5 w-5 rounded"/></td>
-                      <td className="p-1 text-center"><input type="checkbox" checked={log.checks.pestControl} onChange={e => onUpdateOpeningClosingLog({...log, checks: {...log.checks, pestControl: e.target.checked}})} className="h-5 w-5 rounded"/></td>
-                      <td className="p-1"><input type="text" value={log.comments} onChange={e => onUpdateOpeningClosingLog({...log, comments: e.target.value})} className="w-full bg-white border rounded-md p-2"/></td>
-                      <td className="p-1"><input type="text" value={log.signedBy} onChange={e => onUpdateOpeningClosingLog({...log, signedBy: e.target.value})} className="w-full bg-white border rounded-md p-2"/></td>
-                      <td className="p-1 text-center"><button onClick={() => onDeleteOpeningClosingLog(log.id)} className="text-red-500 hover:text-red-700 p-2"><Icon name="delete" className="h-5 w-5" /></button></td>
+                      <td className="p-1 text-center"><input type="checkbox" checked={log.checks.kitchenClean} onChange={e => onUpdateOpeningClosingLog({...log, checks: {...log.checks, kitchenClean: e.target.checked}})} className="h-5 w-5 rounded text-primary focus:ring-primary"/></td>
+                      <td className="p-1 text-center"><input type="checkbox" checked={log.checks.equipmentWorking} onChange={e => onUpdateOpeningClosingLog({...log, checks: {...log.checks, equipmentWorking: e.target.checked}})} className="h-5 w-5 rounded text-primary focus:ring-primary"/></td>
+                      <td className="p-1 text-center"><input type="checkbox" checked={log.checks.temperaturesCorrect} onChange={e => onUpdateOpeningClosingLog({...log, checks: {...log.checks, temperaturesCorrect: e.target.checked}})} className="h-5 w-5 rounded text-primary focus:ring-primary"/></td>
+                      <td className="p-1 text-center"><input type="checkbox" checked={log.checks.staffFitForWork} onChange={e => onUpdateOpeningClosingLog({...log, checks: {...log.checks, staffFitForWork: e.target.checked}})} className="h-5 w-5 rounded text-primary focus:ring-primary"/></td>
+                      <td className="p-1 text-center"><input type="checkbox" checked={log.checks.wasteManaged} onChange={e => onUpdateOpeningClosingLog({...log, checks: {...log.checks, wasteManaged: e.target.checked}})} className="h-5 w-5 rounded text-primary focus:ring-primary"/></td>
+                      <td className="p-1 text-center"><input type="checkbox" checked={log.checks.pestControl} onChange={e => onUpdateOpeningClosingLog({...log, checks: {...log.checks, pestControl: e.target.checked}})} className="h-5 w-5 rounded text-primary focus:ring-primary"/></td>
+                      <td className="p-1"><input type="text" value={log.comments} onChange={e => onUpdateOpeningClosingLog({...log, comments: e.target.value})} className={inputClasses}/></td>
+                      <td className="p-1"><input type="text" value={log.signedBy} onChange={e => onUpdateOpeningClosingLog({...log, signedBy: e.target.value})} className={inputClasses}/></td>
+                      <td className="p-1 text-center"><button onClick={() => onDeleteOpeningClosingLog(log.id)} className="text-red-500 hover:text-red-700 p-2" aria-label={`Delete daily check for ${log.date}`}><Icon name="delete" className="h-5 w-5" /></button></td>
                     </tr>
-                  ))}
+                  )) : <EmptyState />}
                 </tbody>
             </table>
           </div>
@@ -257,106 +335,108 @@ const HaccpCossh: React.FC<HaccpCosshProps> = (props) => {
         title: string,
         logType: 'Fridge' | 'Freezer',
         logs: HaccpLog[]
-    ) => (
-        <div className="space-y-4">
-            <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold text-dark">{title}</h3>
-                <div className="flex gap-2">
-                     <button onClick={() => downloadCSV(logs, title.toLowerCase().replace(/ /g, '_'))} className="bg-medium text-dark font-bold py-2 px-4 rounded-full hover:bg-gray-300 transition text-sm flex items-center"><Icon name="download" className="h-4 w-4 mr-2" />CSV</button>
-                    <button
-                        onClick={() => onAddHaccpLog({ type: logType, label: '', temperature: '' })}
-                        className="bg-black text-white font-bold py-2 px-4 rounded-full hover:bg-gray-800 transition duration-300 flex items-center text-sm"
-                    >
-                        <Icon name="add" className="h-5 w-5 mr-2" />
-                        Log Now
-                    </button>
+    ) => {
+        const EmptyState = () => (
+            <tr>
+                <td colSpan={7} className="text-center p-8 text-muted">
+                    <p>No {title.toLowerCase()} recorded yet.</p>
+                    <p className="text-sm">Click 'Log Now' or use the Chef Bot to add an entry.</p>
+                </td>
+            </tr>
+        );
+
+        return (
+            <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                    <h3 className={`text-lg font-semibold ${activeTheme.classes.textHeading}`}>{title}</h3>
+                    <div className="flex gap-2 items-center">
+                         <ExportMenu onExport={(format) => exportData(logs, title.toLowerCase().replace(/ /g, '_'), format)} activeTheme={activeTheme} />
+                        <button
+                            onClick={() => onAddHaccpLog({ type: logType, label: '', temperature: '' })}
+                            className="bg-primary text-white font-bold py-2 px-4 rounded-full hover:bg-primary-dark transition duration-300 flex items-center text-sm"
+                        >
+                            <Icon name="add" className="h-5 w-5 mr-2" />
+                            Log Now
+                        </button>
+                    </div>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                        <thead className={tableHeaderClasses}>
+                            <tr>
+                                <th className={thClasses}>Label/ID</th>
+                                <th className={thClasses}>Date</th>
+                                <th className={thClasses}>Time</th>
+                                <th className={thClasses}>Temp (°C)</th>
+                                <th className={thClasses}>Initials</th>
+                                <th className={thClasses}>Corrective Action</th>
+                                <th className={`${thClasses} w-12`}></th>
+                            </tr>
+                        </thead>
+                        <tbody className={`divide-y ${activeTheme.classes.inputBorder}`}>
+                            {logs.length > 0 ? logs.map(log => (
+                                <tr key={log.id}>
+                                    <td className="p-1"><input type="text" value={log.label} onChange={(e) => onUpdateHaccpLog({ ...log, label: e.target.value })} className={inputClasses} /></td>
+                                    <td className="p-1"><input type="date" value={log.date} onChange={(e) => onUpdateHaccpLog({ ...log, date: e.target.value })} className={inputClasses} /></td>
+                                    <td className="p-1"><input type="time" value={log.time} onChange={(e) => onUpdateHaccpLog({ ...log, time: e.target.value })} className={inputClasses} /></td>
+                                    <td className="p-1"><input type="text" value={log.temperature} onChange={(e) => onUpdateHaccpLog({ ...log, temperature: handleNumericInputChange(e.target.value) })} className={inputClasses} /></td>
+                                    <td className="p-1"><input type="text" value={log.checkedBy} onChange={(e) => onUpdateHaccpLog({ ...log, checkedBy: e.target.value })} className={inputClasses} /></td>
+                                    <td className="p-1"><input type="text" value={log.correctiveAction} onChange={(e) => onUpdateHaccpLog({ ...log, correctiveAction: e.target.value })} className={inputClasses} /></td>
+                                    <td className="p-1 text-center">
+                                        <button
+                                            onClick={() => onDeleteHaccpLog(log.id)}
+                                            className="text-red-500 hover:text-red-700 p-2 rounded-md"
+                                            aria-label={`Delete log for ${log.label}`}
+                                        >
+                                            <Icon name="delete" className="h-5 w-5" />
+                                        </button>
+                                    </td>
+                                </tr>
+                            )) : <EmptyState />}
+                        </tbody>
+                    </table>
                 </div>
             </div>
-            <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                    <thead className="bg-light text-muted uppercase">
-                        <tr>
-                            <th className="p-3">Label/ID</th>
-                            <th className="p-3">Date</th>
-                            <th className="p-3">Time</th>
-                            <th className="p-3">Temp (°C)</th>
-                            <th className="p-3">Initials</th>
-                            <th className="p-3">Corrective Action</th>
-                            <th className="p-3 w-12"></th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-medium">
-                        {logs.map(log => (
-                            <tr key={log.id} className="hover:bg-light">
-                                {(['label', 'date', 'time', 'temperature', 'checkedBy', 'correctiveAction'] as const).map(field => (
-                                    <td key={field} className="p-1">
-                                        <input
-                                            type={field === 'date' ? 'date' : field === 'time' ? 'time' : 'text'}
-                                            value={log[field]}
-                                            onChange={(e) => onUpdateHaccpLog({ ...log, [field]: e.target.value })}
-                                            className={`w-full bg-white border rounded-md p-2 focus:ring-1 focus:outline-none transition text-dark border-medium focus:ring-black`}
-                                        />
-                                    </td>
-                                ))}
-                                <td className="p-1 text-center">
-                                    <button
-                                        onClick={() => onDeleteHaccpLog(log.id)}
-                                        className="text-red-500 hover:text-red-700 p-2 rounded-md"
-                                        aria-label="Delete log entry"
-                                    >
-                                        <Icon name="delete" className="h-5 w-5" />
-                                    </button>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    );
+        )
+    };
     
     const renderFoodLogsTable = () => (
         <Card>
             <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-dark">Food Probe Logs</h3>
-                <button
-                    onClick={() => downloadCSV(foodLogs, 'food_probe_logs')}
-                    disabled={foodLogs.length === 0}
-                    className="bg-black text-white font-bold py-2 px-4 rounded-full hover:bg-gray-800 transition duration-300 flex items-center text-sm disabled:bg-gray-400"
-                >
-                    <Icon name="download" className="h-5 w-5 mr-2" />
-                    Download CSV
-                </button>
+                <h3 className={`text-lg font-semibold ${activeTheme.classes.textHeading}`}>Food Probe Logs</h3>
+                <ExportMenu onExport={(format) => exportData(foodLogs, 'food_probe_logs', format)} activeTheme={activeTheme} />
             </div>
-            <div className="overflow-y-auto max-h-[60vh] border rounded-lg">
+            <div className={`overflow-y-auto max-h-[60vh] border rounded-lg ${activeTheme.classes.inputBorder}`}>
                 <table className="w-full text-left text-sm">
-                    <thead className="bg-light text-muted uppercase sticky top-0">
+                    <thead className={`${tableHeaderClasses} sticky top-0`}>
                         <tr>
-                            <th className="p-3">Item</th>
-                            <th className="p-3">Type</th>
-                            <th className="p-3">Temp (°C)</th>
-                            <th className="p-3">Date</th>
-                            <th className="p-3">Time</th>
+                            <th className={thClasses}>Item</th>
+                            <th className={thClasses}>Type</th>
+                            <th className={thClasses}>Temp (°C)</th>
+                            <th className={thClasses}>Date</th>
+                            <th className={thClasses}>Time</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-medium">
+                    <tbody className={`divide-y ${activeTheme.classes.inputBorder}`}>
                         {foodLogs.length > 0 ? (
                             foodLogs.map(log => {
                                 const logDate = new Date(log.timestamp);
                                 return (
-                                    <tr key={log.id} className="hover:bg-light">
-                                        <td className="p-3 font-medium text-dark">{log.item}</td>
-                                        <td className="p-3 text-muted">{log.type}</td>
+                                    <tr key={log.id}>
+                                        <td className={`p-3 font-medium ${activeTheme.classes.textColor}`}>{log.item}</td>
+                                        <td className={`p-3 ${activeTheme.classes.textMuted}`}>{log.type}</td>
                                         <td className="p-3 font-semibold text-primary">{log.temperature}</td>
-                                        <td className="p-3 text-muted">{logDate.toLocaleDateString()}</td>
-                                        <td className="p-3 text-muted">{logDate.toLocaleTimeString()}</td>
+                                        <td className={`p-3 ${activeTheme.classes.textMuted}`}>{logDate.toLocaleDateString()}</td>
+                                        <td className={`p-3 ${activeTheme.classes.textMuted}`}>{logDate.toLocaleTimeString()}</td>
                                     </tr>
                                 );
                             })
                         ) : (
                             <tr>
                                 <td colSpan={5} className="text-center p-8 text-muted">
-                                    Food temperature logs recorded via the Chef Bot will appear here.
+                                    <Icon name="thermometer" className="h-10 w-10 mx-auto text-gray-400" />
+                                    <h4 className={`mt-2 text-md font-semibold ${activeTheme.classes.textColor}`}>No Food Probe Logs</h4>
+                                    <p className="text-sm">Food temperature logs recorded via the Chef Bot will appear here.</p>
                                 </td>
                             </tr>
                         )}
@@ -384,46 +464,57 @@ const HaccpCossh: React.FC<HaccpCosshProps> = (props) => {
           signedBy: ''
         });
       };
+      
+      const EmptyState = () => (
+        <tr>
+            <td colSpan={10} className="text-center p-8 text-muted">
+                <Icon name="thermometer" className="h-10 w-10 mx-auto text-gray-400" />
+                <h4 className={`mt-2 text-md font-semibold ${activeTheme.classes.textColor}`}>No Cooling Logs</h4>
+                <p className="text-sm">Click 'New Log' to add your first cooling record.</p>
+            </td>
+        </tr>
+      );
+
       return (
         <Card>
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold text-dark">Blast Chiller / Cooling Logs</h3>
-            <div className="flex gap-2">
-                <button onClick={() => downloadCSV(coolingLogs, 'cooling_logs')} className="bg-medium text-dark font-bold py-2 px-4 rounded-full hover:bg-gray-300 transition text-sm flex items-center"><Icon name="download" className="h-4 w-4 mr-2" />CSV</button>
-                <button onClick={handleAdd} className="bg-black text-white font-bold py-2 px-4 rounded-full hover:bg-gray-800 transition text-sm flex items-center"><Icon name="add" className="h-4 w-4 mr-2" />New Log</button>
+            <h3 className={`text-lg font-semibold ${activeTheme.classes.textHeading}`}>Blast Chiller / Cooling Logs</h3>
+            <div className="flex gap-2 items-center">
+                <ExportMenu onExport={(format) => exportData(coolingLogs, 'cooling_logs', format)} activeTheme={activeTheme} />
+                <button onClick={handleAdd} className="bg-primary text-white font-bold py-2 px-4 rounded-full hover:bg-primary-dark transition text-sm flex items-center"><Icon name="add" className="h-4 w-4 mr-2" />New Log</button>
             </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm whitespace-nowrap">
-              <thead className="bg-light text-muted uppercase">
+              <thead className={tableHeaderClasses}>
                 <tr>
-                  <th className="p-3">Date</th>
-                  <th className="p-3">Food Item</th>
-                  <th className="p-3">Start Time/Temp</th>
-                  <th className="p-3">90 Min Time/Temp</th>
-                  <th className="p-3">Safe?</th>
-                  <th className="p-3">Final Time/Temp</th>
-                  <th className="p-3">Total Time</th>
-                  <th className="p-3">Action</th>
-                  <th className="p-3">Signed</th>
-                  <th className="p-3"></th>
+                  <th className={thClasses}>Date</th>
+                  <th className={thClasses}>Food Item</th>
+                  <th className={thClasses}>Start Time/Temp</th>
+                  <th className={thClasses}>90 Min Time/Temp</th>
+                  <th className={thClasses}>Safe?</th>
+                  <th className={thClasses}>Final Time/Temp</th>
+                  <th className={thClasses}>Total Time</th>
+                  <th className={thClasses}>Action</th>
+                  <th className={thClasses}>Signed</th>
+                  <th className={thClasses}></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-medium">
-                {coolingLogs.map(log => (
+              <tbody className={`divide-y ${activeTheme.classes.inputBorder}`}>
+                {coolingLogs.length > 0 ? coolingLogs.map(log => (
                   <tr key={log.id}>
-                    <td className="p-1"><input type="date" value={log.date} onChange={e => onUpdateCoolingLog({...log, date: e.target.value})} className="w-full bg-white border rounded-md p-2"/></td>
-                    <td className="p-1"><input type="text" value={log.foodItem} onChange={e => onUpdateCoolingLog({...log, foodItem: e.target.value})} className="w-full bg-white border rounded-md p-2"/></td>
-                    <td className="p-1 flex gap-1"><input type="time" value={log.startTime} onChange={e => onUpdateCoolingLog({...log, startTime: e.target.value})} className="w-full bg-white border rounded-md p-2"/><input type="text" value={log.startTemp} onChange={e => onUpdateCoolingLog({...log, startTemp: e.target.value})} className="w-20 bg-white border rounded-md p-2"/></td>
-                    <td className="p-1 flex gap-1"><input type="time" value={log.time90Min} onChange={e => onUpdateCoolingLog({...log, time90Min: e.target.value})} className="w-full bg-white border rounded-md p-2"/><input type="text" value={log.temp90Min} onChange={e => onUpdateCoolingLog({...log, temp90Min: e.target.value})} className="w-20 bg-white border rounded-md p-2"/></td>
-                    <td className="p-1 text-center"><input type="checkbox" checked={log.isSafeAfter90Min} onChange={e => onUpdateCoolingLog({...log, isSafeAfter90Min: e.target.checked})} className="h-5 w-5 rounded"/></td>
-                    <td className="p-1 flex gap-1"><input type="time" value={log.finalTime} onChange={e => onUpdateCoolingLog({...log, finalTime: e.target.value})} className="w-full bg-white border rounded-md p-2"/><input type="text" value={log.finalTemp} onChange={e => onUpdateCoolingLog({...log, finalTemp: e.target.value})} className="w-20 bg-white border rounded-md p-2"/></td>
-                    <td className="p-1"><input type="text" value={log.totalTime} onChange={e => onUpdateCoolingLog({...log, totalTime: e.target.value})} className="w-full bg-white border rounded-md p-2"/></td>
-                    <td className="p-1"><input type="text" value={log.correctiveAction} onChange={e => onUpdateCoolingLog({...log, correctiveAction: e.target.value})} className="w-full bg-white border rounded-md p-2"/></td>
-                    <td className="p-1"><input type="text" value={log.signedBy} onChange={e => onUpdateCoolingLog({...log, signedBy: e.target.value})} className="w-full bg-white border rounded-md p-2"/></td>
-                    <td className="p-1 text-center"><button onClick={() => onDeleteCoolingLog(log.id)} className="text-red-500 hover:text-red-700 p-2"><Icon name="delete" className="h-5 w-5" /></button></td>
+                    <td className="p-1"><input type="date" value={log.date} onChange={e => onUpdateCoolingLog({...log, date: e.target.value})} className={inputClasses}/></td>
+                    <td className="p-1"><input type="text" value={log.foodItem} onChange={e => onUpdateCoolingLog({...log, foodItem: e.target.value})} className={inputClasses}/></td>
+                    <td className="p-1 flex gap-1"><input type="time" value={log.startTime} onChange={e => onUpdateCoolingLog({...log, startTime: e.target.value})} className={inputClasses}/><input type="text" value={log.startTemp} onChange={e => onUpdateCoolingLog({...log, startTemp: handleNumericInputChange(e.target.value)})} className={`w-20 ${inputClasses}`}/></td>
+                    <td className="p-1 flex gap-1"><input type="time" value={log.time90Min} onChange={e => onUpdateCoolingLog({...log, time90Min: e.target.value})} className={inputClasses}/><input type="text" value={log.temp90Min} onChange={e => onUpdateCoolingLog({...log, temp90Min: handleNumericInputChange(e.target.value)})} className={`w-20 ${inputClasses}`}/></td>
+                    <td className="p-1 text-center"><input type="checkbox" checked={log.isSafeAfter90Min} onChange={e => onUpdateCoolingLog({...log, isSafeAfter90Min: e.target.checked})} className="h-5 w-5 rounded text-primary focus:ring-primary"/></td>
+                    <td className="p-1 flex gap-1"><input type="time" value={log.finalTime} onChange={e => onUpdateCoolingLog({...log, finalTime: e.target.value})} className={inputClasses}/><input type="text" value={log.finalTemp} onChange={e => onUpdateCoolingLog({...log, finalTemp: handleNumericInputChange(e.target.value)})} className={`w-20 ${inputClasses}`}/></td>
+                    <td className="p-1"><input type="text" value={log.totalTime} onChange={e => onUpdateCoolingLog({...log, totalTime: e.target.value})} className={inputClasses}/></td>
+                    <td className="p-1"><input type="text" value={log.correctiveAction} onChange={e => onUpdateCoolingLog({...log, correctiveAction: e.target.value})} className={inputClasses}/></td>
+                    <td className="p-1"><input type="text" value={log.signedBy} onChange={e => onUpdateCoolingLog({...log, signedBy: e.target.value})} className={inputClasses}/></td>
+                    <td className="p-1 text-center"><button onClick={() => onDeleteCoolingLog(log.id)} className="text-red-500 hover:text-red-700 p-2" aria-label={`Delete cooling log for ${log.foodItem}`}><Icon name="delete" className="h-5 w-5" /></button></td>
                   </tr>
-                ))}
+                )) : <EmptyState />}
               </tbody>
             </table>
           </div>
@@ -443,47 +534,58 @@ const HaccpCossh: React.FC<HaccpCosshProps> = (props) => {
                 calibratedBy: ''
             });
         };
+
+        const EmptyState = () => (
+            <tr>
+                <td colSpan={8} className="text-center p-8 text-muted">
+                    <Icon name="thermometer" className="h-10 w-10 mx-auto text-gray-400" />
+                    <h4 className={`mt-2 text-md font-semibold ${activeTheme.classes.textColor}`}>No Probe Calibrations Logged</h4>
+                    <p className="text-sm">Click 'New Log' to add a calibration record.</p>
+                </td>
+            </tr>
+        );
+
         return (
             <Card>
                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-dark">Monthly Temperature Probe Calibration</h3>
-                    <div className="flex gap-2">
-                        <button onClick={() => downloadCSV(probeCalibrationLogs, 'probe_calibration_logs')} className="bg-medium text-dark font-bold py-2 px-4 rounded-full hover:bg-gray-300 transition text-sm flex items-center"><Icon name="download" className="h-4 w-4 mr-2" />CSV</button>
-                        <button onClick={handleAdd} className="bg-black text-white font-bold py-2 px-4 rounded-full hover:bg-gray-800 transition text-sm flex items-center"><Icon name="add" className="h-4 w-4 mr-2" />New Log</button>
+                    <h3 className={`text-lg font-semibold ${activeTheme.classes.textHeading}`}>Monthly Temperature Probe Calibration</h3>
+                    <div className="flex gap-2 items-center">
+                        <ExportMenu onExport={(format) => exportData(probeCalibrationLogs, 'probe_calibration_logs', format)} activeTheme={activeTheme} />
+                        <button onClick={handleAdd} className="bg-primary text-white font-bold py-2 px-4 rounded-full hover:bg-primary-dark transition text-sm flex items-center"><Icon name="add" className="h-4 w-4 mr-2" />New Log</button>
                     </div>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
-                        <thead className="bg-light text-muted uppercase">
+                        <thead className={tableHeaderClasses}>
                             <tr>
-                                <th className="p-3">Date</th>
-                                <th className="p-3">Probe ID</th>
-                                <th className="p-3">Ice Point (°C)</th>
-                                <th className="p-3">Boiling Point (°C)</th>
-                                <th className="p-3">Result</th>
-                                <th className="p-3">Comments</th>
-                                <th className="p-3">By</th>
-                                <th className="p-3"></th>
+                                <th className={thClasses}>Date</th>
+                                <th className={thClasses}>Probe ID</th>
+                                <th className={thClasses}>Ice Point (°C)</th>
+                                <th className={thClasses}>Boiling Point (°C)</th>
+                                <th className={thClasses}>Result</th>
+                                <th className={thClasses}>Comments</th>
+                                <th className={thClasses}>By</th>
+                                <th className={thClasses}></th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-medium">
-                          {probeCalibrationLogs.map(log => (
+                        <tbody className={`divide-y ${activeTheme.classes.inputBorder}`}>
+                          {probeCalibrationLogs.length > 0 ? probeCalibrationLogs.map(log => (
                             <tr key={log.id}>
-                              <td className="p-1"><input type="date" value={log.date} onChange={e => onUpdateProbeCalibrationLog({...log, date: e.target.value})} className="w-full bg-white border rounded-md p-2"/></td>
-                              <td className="p-1"><input type="text" value={log.probeId} onChange={e => onUpdateProbeCalibrationLog({...log, probeId: e.target.value})} className="w-full bg-white border rounded-md p-2"/></td>
-                              <td className="p-1"><input type="text" value={log.icePointReading} onChange={e => onUpdateProbeCalibrationLog({...log, icePointReading: e.target.value})} className="w-full bg-white border rounded-md p-2"/></td>
-                              <td className="p-1"><input type="text" value={log.boilingPointReading} onChange={e => onUpdateProbeCalibrationLog({...log, boilingPointReading: e.target.value})} className="w-full bg-white border rounded-md p-2"/></td>
+                              <td className="p-1"><input type="date" value={log.date} onChange={e => onUpdateProbeCalibrationLog({...log, date: e.target.value})} className={inputClasses}/></td>
+                              <td className="p-1"><input type="text" value={log.probeId} onChange={e => onUpdateProbeCalibrationLog({...log, probeId: e.target.value})} className={inputClasses}/></td>
+                              <td className="p-1"><input type="text" value={log.icePointReading} onChange={e => onUpdateProbeCalibrationLog({...log, icePointReading: handleNumericInputChange(e.target.value)})} className={inputClasses}/></td>
+                              <td className="p-1"><input type="text" value={log.boilingPointReading} onChange={e => onUpdateProbeCalibrationLog({...log, boilingPointReading: handleNumericInputChange(e.target.value)})} className={inputClasses}/></td>
                               <td className="p-1">
-                                <select value={log.result} onChange={e => onUpdateProbeCalibrationLog({...log, result: e.target.value as 'Pass' | 'Fail'})} className="w-full bg-white border rounded-md p-2">
+                                <select value={log.result} onChange={e => onUpdateProbeCalibrationLog({...log, result: e.target.value as 'Pass' | 'Fail'})} className={inputClasses}>
                                   <option value="Pass">Pass</option>
                                   <option value="Fail">Fail</option>
                                 </select>
                               </td>
-                              <td className="p-1"><input type="text" value={log.comments} onChange={e => onUpdateProbeCalibrationLog({...log, comments: e.target.value})} className="w-full bg-white border rounded-md p-2"/></td>
-                              <td className="p-1"><input type="text" value={log.calibratedBy} onChange={e => onUpdateProbeCalibrationLog({...log, calibratedBy: e.target.value})} className="w-full bg-white border rounded-md p-2"/></td>
-                              <td className="p-1 text-center"><button onClick={() => onDeleteProbeCalibrationLog(log.id)} className="text-red-500 hover:text-red-700 p-2"><Icon name="delete" className="h-5 w-5" /></button></td>
+                              <td className="p-1"><input type="text" value={log.comments} onChange={e => onUpdateProbeCalibrationLog({...log, comments: e.target.value})} className={inputClasses}/></td>
+                              <td className="p-1"><input type="text" value={log.calibratedBy} onChange={e => onUpdateProbeCalibrationLog({...log, calibratedBy: e.target.value})} className={inputClasses}/></td>
+                              <td className="p-1 text-center"><button onClick={() => onDeleteProbeCalibrationLog(log.id)} className="text-red-500 hover:text-red-700 p-2" aria-label={`Delete calibration log for probe ${log.probeId}`}><Icon name="delete" className="h-5 w-5" /></button></td>
                             </tr>
-                          ))}
+                          )) : <EmptyState />}
                         </tbody>
                     </table>
                 </div>
@@ -501,40 +603,50 @@ const HaccpCossh: React.FC<HaccpCosshProps> = (props) => {
                 usageNotes: ''
             });
         };
+        const EmptyState = () => (
+            <tr>
+                <td colSpan={7} className="text-center p-8 text-muted">
+                    <Icon name="flask" className="h-10 w-10 mx-auto text-gray-400" />
+                    <h4 className={`mt-2 text-md font-semibold ${activeTheme.classes.textColor}`}>COSHH Register is Empty</h4>
+                    <p className="text-sm">Click 'New Substance' to add an entry.</p>
+                </td>
+            </tr>
+        );
+
         return (
             <Card>
                 <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold text-dark">COSHH Register</h3>
-                     <div className="flex gap-2">
-                        <button onClick={() => downloadCSV(cosshLogs, 'cossh_register')} className="bg-medium text-dark font-bold py-2 px-4 rounded-full hover:bg-gray-300 transition text-sm flex items-center"><Icon name="download" className="h-4 w-4 mr-2" />CSV</button>
-                        <button onClick={handleAdd} className="bg-black text-white font-bold py-2 px-4 rounded-full hover:bg-gray-800 transition text-sm flex items-center"><Icon name="add" className="h-4 w-4 mr-2" />New Substance</button>
+                    <h3 className={`text-lg font-semibold ${activeTheme.classes.textHeading}`}>COSHH Register</h3>
+                     <div className="flex gap-2 items-center">
+                        <ExportMenu onExport={(format) => exportData(cosshLogs, 'cossh_register', format)} activeTheme={activeTheme} />
+                        <button onClick={handleAdd} className="bg-primary text-white font-bold py-2 px-4 rounded-full hover:bg-primary-dark transition text-sm flex items-center"><Icon name="add" className="h-4 w-4 mr-2" />New Substance</button>
                     </div>
                 </div>
                  <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm">
-                        <thead className="bg-light text-muted uppercase">
+                        <thead className={tableHeaderClasses}>
                             <tr>
-                                <th className="p-3">Substance Name</th>
-                                <th className="p-3">Date Received</th>
-                                <th className="p-3">Location</th>
-                                <th className="p-3">SDS Available?</th>
-                                <th className="p-3">Usage Notes</th>
-                                <th className="p-3">Disposed Date</th>
-                                <th className="p-3"></th>
+                                <th className={thClasses}>Substance Name</th>
+                                <th className={thClasses}>Date Received</th>
+                                <th className={thClasses}>Location</th>
+                                <th className={thClasses}>SDS Available?</th>
+                                <th className={thClasses}>Usage Notes</th>
+                                <th className={thClasses}>Disposed Date</th>
+                                <th className={thClasses}></th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-medium">
-                            {cosshLogs.map(log => (
+                        <tbody className={`divide-y ${activeTheme.classes.inputBorder}`}>
+                            {cosshLogs.length > 0 ? cosshLogs.map(log => (
                                 <tr key={log.id}>
-                                    <td className="p-1"><input type="text" value={log.substanceName} onChange={e => onUpdateCosshLog({...log, substanceName: e.target.value})} className="w-full bg-white border rounded-md p-2"/></td>
-                                    <td className="p-1"><input type="date" value={log.dateReceived} onChange={e => onUpdateCosshLog({...log, dateReceived: e.target.value})} className="w-full bg-white border rounded-md p-2"/></td>
-                                    <td className="p-1"><input type="text" value={log.location} onChange={e => onUpdateCosshLog({...log, location: e.target.value})} className="w-full bg-white border rounded-md p-2"/></td>
-                                    <td className="p-1 text-center"><input type="checkbox" checked={log.safetyDataSheetAvailable} onChange={e => onUpdateCosshLog({...log, safetyDataSheetAvailable: e.target.checked})} className="h-5 w-5 rounded"/></td>
-                                    <td className="p-1"><input type="text" value={log.usageNotes} onChange={e => onUpdateCosshLog({...log, usageNotes: e.target.value})} className="w-full bg-white border rounded-md p-2"/></td>
-                                    <td className="p-1"><input type="date" value={log.disposedDate || ''} onChange={e => onUpdateCosshLog({...log, disposedDate: e.target.value})} className="w-full bg-white border rounded-md p-2"/></td>
-                                    <td className="p-1 text-center"><button onClick={() => onDeleteCosshLog(log.id)} className="text-red-500 hover:text-red-700 p-2"><Icon name="delete" className="h-5 w-5" /></button></td>
+                                    <td className="p-1"><input type="text" value={log.substanceName} onChange={e => onUpdateCosshLog({...log, substanceName: e.target.value})} className={inputClasses}/></td>
+                                    <td className="p-1"><input type="date" value={log.dateReceived} onChange={e => onUpdateCosshLog({...log, dateReceived: e.target.value})} className={inputClasses}/></td>
+                                    <td className="p-1"><input type="text" value={log.location} onChange={e => onUpdateCosshLog({...log, location: e.target.value})} className={inputClasses}/></td>
+                                    <td className="p-1 text-center"><input type="checkbox" checked={log.safetyDataSheetAvailable} onChange={e => onUpdateCosshLog({...log, safetyDataSheetAvailable: e.target.checked})} className="h-5 w-5 rounded text-primary focus:ring-primary"/></td>
+                                    <td className="p-1"><input type="text" value={log.usageNotes} onChange={e => onUpdateCosshLog({...log, usageNotes: e.target.value})} className={inputClasses}/></td>
+                                    <td className="p-1"><input type="date" value={log.disposedDate || ''} onChange={e => onUpdateCosshLog({...log, disposedDate: e.target.value})} className={inputClasses}/></td>
+                                    <td className="p-1 text-center"><button onClick={() => onDeleteCosshLog(log.id)} className="text-red-500 hover:text-red-700 p-2" aria-label={`Delete COSHH entry for ${log.substanceName}`}><Icon name="delete" className="h-5 w-5" /></button></td>
                                 </tr>
-                            ))}
+                            )) : <EmptyState />}
                         </tbody>
                     </table>
                  </div>
@@ -542,142 +654,8 @@ const HaccpCossh: React.FC<HaccpCosshProps> = (props) => {
         );
     };
 
-    const renderStockTake = () => {
-      const currentStockTake = useMemo(() => stockTakes.find(st => st.date === selectedStockTakeDate), [stockTakes, selectedStockTakeDate]);
-
-      const totalStockValue = useMemo(() => {
-        if (!currentStockTake) return 0;
-        return currentStockTake.items.reduce((acc, item) => acc + (item.quantityOnHand * item.unitPrice), 0);
-      }, [currentStockTake]);
-
-      const handleStartNewStockTake = () => {
-        if (!stockTakes.some(st => st.date === selectedStockTakeDate)) {
-          onAddStockTake({ date: selectedStockTakeDate, items: [], conductedBy: '' });
-        }
-      };
-      
-      const handleUpdateItem = (item: StockItem, field: keyof StockItem, value: any) => {
-        if (!currentStockTake) return;
-        const updatedItems = currentStockTake.items.map(i => i.id === item.id ? {...i, [field]: value} : i);
-        onUpdateStockTake({...currentStockTake, items: updatedItems});
-      };
-
-      const handleAddItem = () => {
-        if (!currentStockTake || !newStockItem.name) return;
-        const newItemWithId: StockItem = {...newStockItem, id: Date.now()};
-        onUpdateStockTake({...currentStockTake, items: [...currentStockTake.items, newItemWithId]});
-        setNewStockItem({ name: '', category: '', quantityOnHand: 0, unit: '', unitPrice: 0 });
-      };
-
-      const handleGetSummary = async () => {
-        if (!currentStockTake) return;
-        setIsLoadingStockSummary(true);
-        setStockSummary('');
-        try {
-            const result = await getStockTakeSummary(currentStockTake, totalStockValue);
-            setStockSummary(result);
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setIsLoadingStockSummary(false);
-        }
-      };
-
-      return (
-        <div className="space-y-6">
-            <Card>
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-                    <div>
-                        <h3 className="text-lg font-semibold text-dark">Monthly Stock Take</h3>
-                        <p className="text-muted text-sm">Conduct and review monthly stock takes for financial tracking.</p>
-                    </div>
-                    <input
-                        type="month"
-                        value={selectedStockTakeDate}
-                        onChange={e => setSelectedStockTakeDate(e.target.value)}
-                        className="bg-light border border-medium rounded-md p-2 focus:ring-2 focus:ring-black focus:outline-none transition"
-                    />
-                </div>
-            </Card>
-
-            {!currentStockTake ? (
-                <Card className="text-center">
-                    <p className="text-muted mb-4">No stock take found for {selectedStockTakeDate}.</p>
-                    <button onClick={handleStartNewStockTake} className="bg-black text-white font-bold py-2 px-4 rounded-full hover:bg-gray-800 transition text-sm">
-                        Start Stock Take for {selectedStockTakeDate}
-                    </button>
-                </Card>
-            ) : (
-                <>
-                    <Card>
-                        <div className="flex justify-between items-center mb-4">
-                             <h4 className="font-semibold">Total Stock Value: <span className="text-primary text-xl font-bold">${totalStockValue.toFixed(2)}</span></h4>
-                             <div className="flex gap-2">
-                                <button onClick={() => downloadCSV(currentStockTake.items.map(i => ({...i, totalValue: (i.quantityOnHand * i.unitPrice).toFixed(2)})), `stock_take_${currentStockTake.date}`)} className="bg-medium text-dark font-bold py-2 px-4 rounded-full hover:bg-gray-300 transition text-sm flex items-center"><Icon name="download" className="h-4 w-4 mr-2" />CSV</button>
-                                <button onClick={handleGetSummary} disabled={isLoadingStockSummary} className="bg-black text-white font-bold py-2 px-4 rounded-full hover:bg-gray-800 transition text-sm flex items-center disabled:bg-gray-500">
-                                    {isLoadingStockSummary ? <Loader/> : <Icon name="sparkles" className="h-4 w-4 mr-2" />}
-                                    {isLoadingStockSummary ? 'Analyzing...' : 'Get AI Financial Summary'}
-                                </button>
-                            </div>
-                        </div>
-                        {(isLoadingStockSummary || stockSummary) && (
-                            <div className="mt-6 border-t border-medium pt-4">
-                                <h3 className="text-md font-semibold text-dark mb-2">AI Summary</h3>
-                                {isLoadingStockSummary ? (
-                                    <div className="flex flex-col items-center justify-center p-8"><Loader /><p className="mt-4 text-muted">Analyzing stock data...</p></div>
-                                ) : (
-                                stockSummary && <MarkdownRenderer content={stockSummary} containerClassName="text-sm" />
-                                )}
-                            </div>
-                        )}
-                    </Card>
-                    <Card>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left text-sm">
-                                <thead className="bg-light text-muted uppercase">
-                                    <tr>
-                                        <th className="p-2">Item Name</th>
-                                        <th className="p-2">Category</th>
-                                        <th className="p-2">Qty on Hand</th>
-                                        <th className="p-2">Unit</th>
-                                        <th className="p-2">Price/Unit</th>
-                                        <th className="p-2">Total Value</th>
-                                        <th className="p-2"></th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-medium">
-                                    {currentStockTake.items.map(item => (
-                                        <tr key={item.id}>
-                                            <td className="p-1"><input type="text" value={item.name} onChange={e => handleUpdateItem(item, 'name', e.target.value)} className="w-full bg-white border rounded p-2"/></td>
-                                            <td className="p-1"><input type="text" value={item.category} onChange={e => handleUpdateItem(item, 'category', e.target.value)} className="w-full bg-white border rounded p-2"/></td>
-                                            <td className="p-1"><input type="number" value={item.quantityOnHand} onChange={e => handleUpdateItem(item, 'quantityOnHand', parseFloat(e.target.value) || 0)} className="w-24 bg-white border rounded p-2"/></td>
-                                            <td className="p-1"><input type="text" value={item.unit} onChange={e => handleUpdateItem(item, 'unit', e.target.value)} className="w-24 bg-white border rounded p-2"/></td>
-                                            <td className="p-1"><input type="number" value={item.unitPrice} onChange={e => handleUpdateItem(item, 'unitPrice', parseFloat(e.target.value) || 0)} className="w-24 bg-white border rounded p-2"/></td>
-                                            <td className="p-2 font-semibold">${(item.quantityOnHand * item.unitPrice).toFixed(2)}</td>
-                                            <td className="p-1 text-center"><button onClick={() => onDeleteStockItem(currentStockTake.id, item.id)} className="text-red-500 hover:text-red-700 p-1"><Icon name="delete" className="h-4 w-4"/></button></td>
-                                        </tr>
-                                    ))}
-                                    {/* New Item Row */}
-                                    <tr>
-                                        <td className="p-1"><input type="text" value={newStockItem.name} onChange={e => setNewStockItem({...newStockItem, name: e.target.value})} placeholder="New Item" className="w-full bg-light border rounded p-2"/></td>
-                                        <td className="p-1"><input type="text" value={newStockItem.category} onChange={e => setNewStockItem({...newStockItem, category: e.target.value})} placeholder="Category" className="w-full bg-light border rounded p-2"/></td>
-                                        <td className="p-1"><input type="number" value={newStockItem.quantityOnHand} onChange={e => setNewStockItem({...newStockItem, quantityOnHand: parseFloat(e.target.value) || 0})} className="w-24 bg-light border rounded p-2"/></td>
-                                        <td className="p-1"><input type="text" value={newStockItem.unit} onChange={e => setNewStockItem({...newStockItem, unit: e.target.value})} placeholder="Unit" className="w-24 bg-light border rounded p-2"/></td>
-                                        <td className="p-1"><input type="number" value={newStockItem.unitPrice} onChange={e => setNewStockItem({...newStockItem, unitPrice: parseFloat(e.target.value) || 0})} placeholder="Price" className="w-24 bg-light border rounded p-2"/></td>
-                                        <td colSpan={2} className="p-1"><button onClick={handleAddItem} className="w-full bg-black text-white font-bold py-2 px-4 rounded-md hover:bg-gray-800">Add</button></td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </Card>
-                </>
-            )}
-        </div>
-      )
-    };
-    
     const renderMonthlyReport = () => {
-        const handleDownload = () => {
+        const handleDownload = (format: ExportFormat) => {
             const monthStr = String(reportMonth).padStart(2, '0');
             const datePrefix = `${reportYear}-${monthStr}`;
 
@@ -691,7 +669,7 @@ const HaccpCossh: React.FC<HaccpCosshProps> = (props) => {
             cosshLogs.filter(log => log.dateReceived.startsWith(datePrefix)).forEach(log => allLogs.push({ logType: 'COSHH', ...log }));
 
             if(allLogs.length === 0) {
-                alert(`No logs found for ${datePrefix}.`);
+                alert(`No logs found for ${new Date(reportYear, reportMonth - 1).toLocaleString('default', { month: 'long' })} ${reportYear}.`);
                 return;
             }
             
@@ -706,7 +684,7 @@ const HaccpCossh: React.FC<HaccpCosshProps> = (props) => {
                 'Signed By': log.signedBy || log.checkedBy || log.calibratedBy || '',
             }));
 
-            downloadCSV(reportData, `monthly_report_${datePrefix}`);
+            exportData(reportData, `monthly_report_${datePrefix}`, format);
         };
 
         return (
@@ -716,18 +694,18 @@ const HaccpCossh: React.FC<HaccpCosshProps> = (props) => {
                     <Icon name="download" className="h-6 w-6" />
                     </div>
                     <div>
-                        <h2 className="text-lg font-semibold text-dark">Monthly Compliance Report</h2>
-                        <p className="text-muted mt-1 mb-4 text-sm">Compile all logs from a specific month into a single downloadable CSV file for audits and review.</p>
+                        <h2 className={`text-lg font-semibold ${activeTheme.classes.textHeading}`}>Monthly Compliance Report</h2>
+                        <p className={`${activeTheme.classes.textMuted} mt-1 mb-4 text-sm`}>Compile all logs from a specific month into a single downloadable file for audits and review.</p>
                         <div className="flex flex-col sm:flex-row gap-4 items-center">
-                            <select value={reportMonth} onChange={e => setReportMonth(Number(e.target.value))} className="bg-light border border-medium rounded-md p-2 focus:ring-2 focus:ring-black focus:outline-none transition">
+                            <select value={reportMonth} onChange={e => setReportMonth(Number(e.target.value))} className={`${inputClasses} p-2`}>
                                 {Array.from({length: 12}, (_, i) => <option key={i+1} value={i+1}>{new Date(0, i).toLocaleString('default', { month: 'long' })}</option>)}
                             </select>
-                            <select value={reportYear} onChange={e => setReportYear(Number(e.target.value))} className="bg-light border border-medium rounded-md p-2 focus:ring-2 focus:ring-black focus:outline-none transition">
+                            <select value={reportYear} onChange={e => setReportYear(Number(e.target.value))} className={`${inputClasses} p-2`}>
                                 {Array.from({length: 5}, (_, i) => <option key={i} value={new Date().getFullYear() - i}>{new Date().getFullYear() - i}</option>)}
                             </select>
-                            <button onClick={handleDownload} className="bg-black text-white font-bold py-2 px-5 rounded-full hover:bg-gray-800 transition">
-                                Generate & Download Report
-                            </button>
+                            <div>
+                                <ExportMenu onExport={handleDownload} activeTheme={activeTheme} />
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -742,30 +720,31 @@ const HaccpCossh: React.FC<HaccpCosshProps> = (props) => {
                    <Icon name="shield-check" className="h-6 w-6" />
                 </div>
                 <div>
-                    <h2 className="text-lg font-semibold text-dark">AI Safety Audit</h2>
-                    <p className="text-muted mt-1 mb-4 text-sm">Analyze all recent temperature logs to identify trends, potential risks, and compliance gaps.</p>
+                    <h2 className={`text-lg font-semibold ${activeTheme.classes.textHeading}`}>AI Safety Audit</h2>
+                    <p className={`${activeTheme.classes.textMuted} mt-1 mb-4 text-sm`}>Analyze all recent temperature logs to identify trends, potential risks, and compliance gaps.</p>
                     <button
                         onClick={handleRunAudit}
                         disabled={isLoadingAudit}
-                        className="bg-black text-white font-bold py-2 px-5 rounded-full hover:bg-gray-800 transition duration-300 disabled:bg-gray-400 flex items-center justify-center"
+                        className="bg-primary text-white font-bold py-2 px-5 rounded-full hover:bg-primary-dark transition duration-300 disabled:bg-gray-400 flex items-center justify-center"
                     >
                         {isLoadingAudit ? <Loader /> : 'Run AI Safety Audit'}
                     </button>
                 </div>
             </div>
             {(isLoadingAudit || auditReport) && (
-                 <div className="mt-6 border-t border-medium pt-4">
-                    <h3 className="text-md font-semibold text-dark mb-2">Audit Report</h3>
+                 <div className={`mt-6 border-t pt-4 ${activeTheme.classes.inputBorder}`}>
+                    <h3 className={`text-md font-semibold ${activeTheme.classes.textColor} mb-2`}>Audit Report</h3>
                     {isLoadingAudit ? (
                         <div className="flex flex-col items-center justify-center p-8">
                             <Loader />
-                            <p className="mt-4 text-muted">Analyzing your log data...</p>
+                            <p className={`mt-4 ${activeTheme.classes.textMuted}`}>Analyzing your log data...</p>
                         </div>
                     ) : (
                        auditReport && <MarkdownRenderer content={auditReport} containerClassName="text-sm" />
                     )}
                 </div>
             )}
+            {error && !isLoadingAudit && <p className="text-red-500 mt-4">{error}</p>}
         </Card>
     );
     
@@ -776,34 +755,34 @@ const HaccpCossh: React.FC<HaccpCosshProps> = (props) => {
                     <Icon name="help" className="h-6 w-6" />
                 </div>
                 <div>
-                    <h2 className="text-lg font-semibold text-dark">HACCP & COSHH Guidance</h2>
-                    <p className="text-muted mt-1 mb-4 text-sm">Ask any question about food safety, HACCP principles, or COSHH regulations to get expert guidance.</p>
+                    <h2 className={`text-lg font-semibold ${activeTheme.classes.textHeading}`}>HACCP & COSHH Guidance</h2>
+                    <p className={`${activeTheme.classes.textMuted} mt-1 mb-4 text-sm`}>Ask any question about food safety, HACCP principles, or COSHH regulations to get expert guidance.</p>
                     <div className="flex flex-col sm:flex-row gap-2">
                         <textarea
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
                             placeholder="e.g., What are the 7 principles of HACCP?"
-                            className="flex-grow bg-light border-medium text-dark placeholder:text-muted focus:ring-black border rounded-full p-3 pl-5 focus:ring-2 focus:outline-none transition"
+                            className={`flex-grow border rounded-full p-3 pl-5 focus:ring-2 focus:outline-none transition ${activeTheme.classes.inputBg} ${activeTheme.classes.inputText} ${activeTheme.classes.inputBorder} ${activeTheme.classes.placeholderText}`}
                             rows={1}
                         />
                         <button
                             onClick={handleGetGuidance}
                             disabled={isLoadingGuidance}
-                            className="bg-black text-white font-bold py-3 px-5 rounded-full hover:bg-gray-800 transition duration-300 disabled:bg-gray-400 flex items-center justify-center"
+                            className="bg-primary text-white font-bold py-3 px-5 rounded-full hover:bg-primary-dark transition duration-300 disabled:bg-gray-400 flex items-center justify-center"
                         >
                             {isLoadingGuidance ? <Loader /> : 'Get Guidance'}
                         </button>
                     </div>
-                    {error && <p className="text-red-500 mt-2 text-sm">{error}</p>}
+                    {error && !isLoadingGuidance && <p className="text-red-500 mt-2 text-sm">{error}</p>}
                 </div>
             </div>
             {(isLoadingGuidance || guidance) && (
-                <div className="mt-6 border-t border-medium pt-4">
-                    <h3 className="text-md font-semibold text-dark mb-2">Guidance Result</h3>
+                <div className={`mt-6 border-t pt-4 ${activeTheme.classes.inputBorder}`}>
+                    <h3 className={`text-md font-semibold ${activeTheme.classes.textColor} mb-2`}>Guidance Result</h3>
                     {isLoadingGuidance ? (
                         <div className="flex flex-col items-center justify-center p-8">
                             <Loader />
-                            <p className="mt-4 text-muted">Consulting food safety expert...</p>
+                            <p className={`mt-4 ${activeTheme.classes.textMuted}`}>Consulting food safety expert...</p>
                         </div>
                     ) : (
                         guidance && <MarkdownRenderer content={guidance} containerClassName="text-sm" />
@@ -821,18 +800,17 @@ const HaccpCossh: React.FC<HaccpCosshProps> = (props) => {
             case 'CoolingLog': return `Cooling log for "${(recentlyDeletedItem.item as CoolingLog).foodItem}" deleted.`;
             case 'CosshLog': return `COSHH entry for "${(recentlyDeletedItem.item as CosshLog).substanceName}" deleted.`;
             case 'ProbeCalibrationLog': return `Calibration log for probe "${(recentlyDeletedItem.item as ProbeCalibrationLog).probeId}" deleted.`;
-            case 'StockItem': return `Stock item "${(recentlyDeletedItem.item as StockItem).name}" deleted.`;
             default: return 'Item deleted.';
         }
     }
 
     return (
         <div className="space-y-6">
-            <div className="mb-6 border-b border-medium">
+            <div className={`mb-6 border-b ${activeTheme.classes.inputBorder}`}>
                 <div className="overflow-x-auto">
                     <nav className="-mb-px flex space-x-4" aria-label="Tabs">
                         {TABS.map(tab => (
-                            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`whitespace-nowrap pb-4 px-2 border-b-2 font-medium text-sm ${activeTab === tab.id ? 'border-black text-black' : 'border-transparent text-muted hover:text-dark'}`}>
+                            <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`whitespace-nowrap pb-4 px-2 border-b-2 font-medium text-sm ${activeTab === tab.id ? `border-primary ${activeTheme.classes.textColor}` : `border-transparent ${activeTheme.classes.textMuted} hover:${activeTheme.classes.textColor}`}`}>
                                 {tab.label}
                             </button>
                         ))}

@@ -4,14 +4,16 @@ import { Card } from './common/Card';
 import { Loader } from './common/Loader';
 import { Icon } from './common/Icon';
 import { MarkdownRenderer } from './common/MarkdownRenderer';
+import { compressImage } from '../utils/image';
+import { useTheme } from '../contexts/ThemeContext';
 import type { Recipe } from '../types';
 
 interface SousChefVisionProps {
   onAddNote: (content: string, imageUrl?: string) => void;
-  onSaveVisionRecipe: (recipe: Recipe) => void;
+  onSaveRecipe: (recipe: Recipe) => void;
 }
 
-const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote, onSaveVisionRecipe }) => {
+const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote, onSaveRecipe }) => {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [prompt, setPrompt] = useState<string>('');
@@ -21,6 +23,7 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote, onSaveVision
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [noteSaved, setNoteSaved] = useState(false);
   const [recipeSaved, setRecipeSaved] = useState(false);
+  const { activeTheme } = useTheme();
 
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -63,17 +66,19 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote, onSaveVision
       reader.onerror = (error) => reject(error);
     });
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      if (file.size > 4 * 1024 * 1024) { // 4MB limit
-        setError('Image file is too large. Please select a file under 4MB.');
-        return;
-      }
-      setImageFile(file);
-      setImageUrl(URL.createObjectURL(file));
       setError('');
-      setAnalysisResult(null);
+      try {
+        const compressedFile = await compressImage(file);
+        setImageFile(compressedFile);
+        setImageUrl(URL.createObjectURL(compressedFile));
+        setAnalysisResult(null);
+      } catch (err) {
+        console.error("Image compression failed:", err);
+        setError("Could not process image. Please try a different file.");
+      }
     }
   };
 
@@ -101,7 +106,7 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote, onSaveVision
       const result = await analyzeImage(prompt, imageBase64, imageFile.type);
       setAnalysisResult(result);
     } catch (err) {
-      setError('Failed to analyze image. Please try again.');
+      setError('AI analysis failed. Please check your connection and try again.');
       console.error(err);
     } finally {
       setIsLoading(false);
@@ -125,7 +130,7 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote, onSaveVision
       const result = await analyzeImage(macroPrompt, imageBase64, imageFile.type);
       setAnalysisResult(result);
     } catch (err) {
-      setError('Failed to get macro analysis. Please try again.');
+      setError('Macro analysis failed. Please check your connection and try again.');
       console.error(err);
     } finally {
       setIsLoading(false);
@@ -149,7 +154,7 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote, onSaveVision
         const result = await getRecipeFromImage(recipePrompt, imageBase64, imageFile.type);
         setAnalysisResult(result);
     } catch (err) {
-        setError('Failed to generate recipe from image. Please try again.');
+        setError('Failed to generate recipe from image. The AI may not have been able to create a recipe from this image. Please try again.');
         console.error(err);
     } finally {
         setIsLoading(false);
@@ -172,13 +177,19 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote, onSaveVision
             canvas.height = video.videoHeight;
             context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
             
-            canvas.toBlob(blob => {
+            canvas.toBlob(async (blob) => {
                 if (blob) {
                     const imageFile = new File([blob], 'capture.jpg', { type: 'image/jpeg' });
-                    setImageFile(imageFile);
-                    setImageUrl(URL.createObjectURL(imageFile));
-                    setAnalysisResult(null);
-                    setIsCameraOpen(false);
+                    try {
+                        const compressedFile = await compressImage(imageFile);
+                        setImageFile(compressedFile);
+                        setImageUrl(URL.createObjectURL(compressedFile));
+                        setAnalysisResult(null);
+                        setIsCameraOpen(false);
+                    } catch (err) {
+                        setError("Could not process captured image.");
+                        setIsCameraOpen(false);
+                    }
                 }
             }, 'image/jpeg');
         }
@@ -204,7 +215,7 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote, onSaveVision
   
   const handleSaveRecipe = () => {
     if (!analysisResult || typeof analysisResult === 'string' || !imageUrl) return;
-    onSaveVisionRecipe({ ...analysisResult, imageUrl });
+    onSaveRecipe({ ...analysisResult, imageUrl });
     setRecipeSaved(true);
     setTimeout(() => setRecipeSaved(false), 2000);
   }
@@ -237,23 +248,23 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote, onSaveVision
     const recipe = analysisResult;
     return (
         <div>
-            <h3 className="text-xl font-bold text-dark mb-2">{recipe.title}</h3>
-            <p className="text-muted italic mb-4">{recipe.description}</p>
+            <h3 className={`text-xl font-bold ${activeTheme.classes.textHeading} mb-2`}>{recipe.title}</h3>
+            <p className={`${activeTheme.classes.textMuted} italic mb-4`}>{recipe.description}</p>
             <div className="flex space-x-6 mb-6 text-sm">
-                <div><p className="font-bold text-dark">Yields:</p><p className="text-muted">{recipe.yields}</p></div>
-                <div><p className="font-bold text-dark">Prep time:</p><p className="text-muted">{recipe.prepTime}</p></div>
-                <div><p className="font-bold text-dark">Cook time:</p><p className="text-muted">{recipe.cookTime}</p></div>
+                <div><p className={`font-bold ${activeTheme.classes.textColor}`}>Yields:</p><p className={activeTheme.classes.textMuted}>{recipe.yields}</p></div>
+                <div><p className={`font-bold ${activeTheme.classes.textColor}`}>Prep time:</p><p className={activeTheme.classes.textMuted}>{recipe.prepTime}</p></div>
+                <div><p className={`font-bold ${activeTheme.classes.textColor}`}>Cook time:</p><p className={activeTheme.classes.textMuted}>{recipe.cookTime}</p></div>
             </div>
             <div className="space-y-6">
                 <div>
-                    <h4 className="font-semibold text-dark mb-2 border-b border-medium pb-1">Ingredients</h4>
-                    <ul className="list-disc list-inside space-y-1 text-muted pl-2">
+                    <h4 className={`font-semibold ${activeTheme.classes.textColor} mb-2 border-b pb-1 ${activeTheme.classes.inputBorder}`}>Ingredients</h4>
+                    <ul className={`list-disc list-inside space-y-1 ${activeTheme.classes.textMuted} pl-2`}>
                         {recipe.ingredients.map((item, index) => <li key={index}>{item}</li>)}
                     </ul>
                 </div>
                 <div>
-                    <h4 className="font-semibold text-dark mb-2 border-b border-medium pb-1">Instructions</h4>
-                    <ol className="list-decimal list-inside space-y-3 text-muted pl-2">
+                    <h4 className={`font-semibold ${activeTheme.classes.textColor} mb-2 border-b pb-1 ${activeTheme.classes.inputBorder}`}>Instructions</h4>
+                    <ol className={`list-decimal list-inside space-y-3 ${activeTheme.classes.textMuted} pl-2`}>
                         {recipe.instructions.map((step, index) => <li key={index}>{step}</li>)}
                     </ol>
                 </div>
@@ -279,25 +290,25 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote, onSaveVision
   return (
     <div className="space-y-6">
       <Card>
-        <h2 className="text-xl font-bold text-dark mb-4 flex items-center">
+        <h2 className={`text-xl font-bold ${activeTheme.classes.textHeading} mb-4 flex items-center`}>
             <Icon name="visibility" className="h-6 w-6 mr-2" />
             Sous-Chef Vision
         </h2>
-        <p className="text-muted mb-4">Upload an image or use your camera to identify ingredients, get calorie estimates, or ask your own questions for instant analysis.</p>
+        <p className={`${activeTheme.classes.textMuted} mb-4`}>Upload an image or use your camera to identify ingredients, get calorie estimates, or ask your own questions for instant analysis.</p>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="flex flex-col items-center justify-center bg-light border-2 border-dashed border-medium rounded-lg p-6 text-center h-full min-h-[250px]">
+            <div className={`flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-6 text-center h-full min-h-[250px] ${activeTheme.classes.inputBg} ${activeTheme.classes.inputBorder}`}>
                 {imageUrl ? (
                     <div className="relative w-full h-full flex items-center justify-center">
                         <img src={imageUrl} alt="Preview" className="max-h-64 w-auto object-contain rounded-md mx-auto"/>
-                        <button onClick={handleRemoveImage} className="absolute top-2 right-2 bg-red-600/80 hover:bg-red-600 text-white rounded-md p-1.5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-light focus:ring-red-500">
+                        <button onClick={handleRemoveImage} aria-label="Remove uploaded image" className="absolute top-2 right-2 bg-red-600/80 hover:bg-red-600 text-white rounded-md p-1.5 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-light focus:ring-red-500">
                            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                     </div>
                 ) : (
                     <div>
                         <Icon name="image" className="mx-auto h-12 w-12 text-gray-400" />
-                        <p className="mt-2 text-muted">Drag & drop or</p>
+                        <p className={`mt-2 ${activeTheme.classes.textMuted}`}>Drag & drop or</p>
                          <div className="mt-2 flex justify-center gap-4">
                             <button onClick={() => fileInputRef.current?.click()} className="text-primary hover:underline font-semibold">
                                 upload an image
@@ -315,7 +326,7 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote, onSaveVision
                             className="hidden"
                             aria-label="Upload image"
                         />
-                        <p className="text-xs text-muted mt-2">PNG, JPG, WEBP up to 4MB</p>
+                        <p className={`text-xs ${activeTheme.classes.textMuted} mt-2`}>PNG, JPG, WEBP - Optimized to 1080px width</p>
                     </div>
                 )}
             </div>
@@ -325,7 +336,7 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote, onSaveVision
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     placeholder="e.g., Identify potential allergens in this dish, or suggest a wine pairing."
-                    className="flex-grow bg-light border-medium text-dark placeholder:text-muted focus:ring-black border rounded-md p-3 focus:ring-2 focus:outline-none transition resize-none"
+                    className={`flex-grow border rounded-md p-3 focus:ring-2 focus:outline-none transition resize-none ${activeTheme.classes.inputBg} ${activeTheme.classes.inputText} ${activeTheme.classes.inputBorder} ${activeTheme.classes.placeholderText} focus:ring-primary`}
                     rows={6}
                     aria-label="Prompt for image analysis"
                 />
@@ -333,7 +344,7 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote, onSaveVision
                     <button
                         onClick={handleAnalyze}
                         disabled={!!isLoading || !imageFile || !prompt.trim()}
-                        className="w-full bg-black text-white font-bold py-3 px-6 rounded-md hover:bg-gray-800 transition duration-300 disabled:bg-gray-500 flex items-center justify-center"
+                        className="w-full bg-primary text-white font-bold py-3 px-6 rounded-md hover:bg-primary-dark transition duration-300 disabled:bg-gray-500 flex items-center justify-center"
                         aria-label="Analyze Image with custom prompt"
                     >
                         {isLoading === 'prompt' ? <Loader /> : 'Analyze'}
@@ -362,11 +373,11 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote, onSaveVision
       
       {(isLoading || analysisResult) && (
         <Card>
-            <h3 className="text-lg font-semibold text-dark mb-4">Analysis Result</h3>
+            <h3 className={`text-lg font-semibold ${activeTheme.classes.textHeading} mb-4`}>Analysis Result</h3>
             {isLoading ? (
                 <div className="flex flex-col items-center justify-center p-8">
                     <Loader />
-                    <p className="mt-4 text-muted">Analyzing image...</p>
+                    <p className={`mt-4 ${activeTheme.classes.textMuted}`}>Analyzing image...</p>
                 </div>
             ) : (
                 renderResult()
@@ -381,7 +392,7 @@ const SousChefVision: React.FC<SousChefVisionProps> = ({ onAddNote, onSaveVision
             <div className="mt-6 flex gap-4">
                 <button 
                     onClick={handleCapture} 
-                    className="bg-black text-white font-bold py-3 px-6 rounded-md hover:bg-gray-800 transition duration-300 flex items-center gap-2"
+                    className="bg-primary text-white font-bold py-3 px-6 rounded-md hover:bg-primary-dark transition duration-300 flex items-center gap-2"
                 >
                     <Icon name="camera" className="h-6 w-6"/>
                     Capture

@@ -76,19 +76,22 @@ export const useSpeechRecognition = (): SpeechRecognitionHook => {
     recognition.lang = 'en-US';
     recognition.continuous = true; // Keep listening until explicitly stopped
 
+    // **FIXED**: Replaced the fragile .split() logic with a robust reconstruction of the transcript.
+    // This new onresult handler is safer and prevents the "cannot read properties of undefined" error.
     recognition.onresult = (event: SpeechRecognitionEvent) => {
-      let interimTranscript = '';
-      let finalTranscript = '';
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript + ' ';
-        } else {
-          interimTranscript += event.results[i][0].transcript;
+      let fullTranscript = '';
+      // Reconstruct the full transcript from the results list on every event.
+      // The SpeechRecognition API handles replacing interim results within this list automatically.
+      for (let i = 0; i < event.results.length; i++) {
+        // Safety check for transcript existence
+        const transcriptPart = event.results[i]?.[0]?.transcript;
+        if (transcriptPart) {
+          fullTranscript += transcriptPart;
         }
       }
-      // Combine final and interim for a responsive feel
-      setTranscript(prev => prev.substring(0, prev.lastIndexOf(interimTranscript.split(' ')[0])) + finalTranscript + interimTranscript);
+      setTranscript(fullTranscript);
     };
+
 
     recognition.onend = () => {
       // If it ends but we are still supposed to be listening (e.g., browser timeout), restart.

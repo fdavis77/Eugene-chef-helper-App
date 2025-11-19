@@ -1,3 +1,4 @@
+
 export interface ChatMessage {
   role: 'user' | 'bot';
   content: string;
@@ -77,31 +78,22 @@ export interface ProbeCalibrationLog {
   calibratedBy: string;
 }
 
-export interface StockItem {
-  id: number;
-  name: string;
-  category: string;
-  quantityOnHand: number;
-  unit: string;
-  unitPrice: number;
-}
-
-export interface StockTake {
-  id: number;
-  date: string; // YYYY-MM
-  items: StockItem[];
-  notes?: string;
-  conductedBy: string;
-}
-
-
 export interface Ingredient {
   name: string;
   quantity: string;
   unit: string;
 }
 
+export interface RecipeCosting {
+  totalCost: string;
+  sellingPrice: string;
+  taxRate: string;
+  grossProfitPercent: string;
+  foodCostPercent: string;
+}
+
 export interface Recipe {
+  id?: string;
   title: string;
   description: string;
   yields: string;
@@ -110,6 +102,7 @@ export interface Recipe {
   ingredients: string[];
   instructions: string[];
   imageUrl?: string;
+  costing?: RecipeCosting;
 }
 
 export interface CalendarDay {
@@ -148,7 +141,7 @@ export interface ProfileData {
 }
 
 // Fix: Added ThemeName and Theme types for theme context.
-export type ThemeName = 'twilight' | 'crimson' | 'evergreen' | 'light';
+export type ThemeName = 'dark' | 'light' | 'evergreen';
 
 export interface Theme {
   name: string;
@@ -157,6 +150,8 @@ export interface Theme {
     headerBg: string;
     cardBg: string;
     cardBorder: string;
+    textHeading: string;
+    textColor: string;
     textAccent: string;
     textMuted: string;
     buttonBg: string;
@@ -165,13 +160,17 @@ export interface Theme {
     buttonFocusRingOffset: string;
     navButtonActiveBg: string;
     navButtonHoverBg: string;
+    inputBg: string;
+    inputText: string;
+    inputBorder: string;
+    placeholderText: string;
   };
 }
 
-export type LogType = 'HaccpLog' | 'OpeningClosingCheck' | 'CoolingLog' | 'CosshLog' | 'ProbeCalibrationLog' | 'StockItem';
+export type LogType = 'HaccpLog' | 'OpeningClosingCheck' | 'CoolingLog' | 'CosshLog' | 'ProbeCalibrationLog';
 
 export interface RecentlyDeletedItem {
   type: LogType;
-  item: HaccpLog | OpeningClosingCheck | CoolingLog | CosshLog | ProbeCalibrationLog | StockItem;
+  item: HaccpLog | OpeningClosingCheck | CoolingLog | CosshLog | ProbeCalibrationLog;
   context?: { [key: string]: any }; // For nested items, e.g., { stockTakeId: number }
 }

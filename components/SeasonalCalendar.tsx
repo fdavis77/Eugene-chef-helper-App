@@ -4,6 +4,7 @@ import { Card } from './common/Card';
 import { Loader } from './common/Loader';
 import { Icon } from './common/Icon';
 import { countries, Country } from '../data/countries';
+import { useTheme } from '../contexts/ThemeContext';
 import type { SeasonalProduce } from '../types';
 
 
@@ -32,6 +33,7 @@ const SeasonalCalendar: React.FC = () => {
     const [produce, setProduce] = useState<SeasonalProduce>(initialProduceState);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
+    const { activeTheme } = useTheme();
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -64,11 +66,11 @@ const SeasonalCalendar: React.FC = () => {
 
     const renderProduceList = (title: keyof SeasonalProduce, items: string[]) => (
         <div key={title}>
-            <h3 className="text-lg font-semibold text-dark mb-3 border-b border-medium pb-2">{title}</h3>
+            <h3 className={`text-lg font-semibold ${activeTheme.classes.textHeading} mb-3 border-b border-medium pb-2`}>{title}</h3>
             {items.length > 0 ? (
                 <ul className="flex flex-wrap gap-2">
                     {items.map((item, index) => (
-                        <li key={index} className="bg-light text-dark text-sm font-medium px-3 py-1.5 rounded-full border border-medium">
+                        <li key={index} className={`bg-light ${activeTheme.classes.textColor} text-sm font-medium px-3 py-1.5 rounded-full border border-medium`}>
                             {item}
                         </li>
                     ))}
@@ -84,7 +86,7 @@ const SeasonalCalendar: React.FC = () => {
             <Card>
                 <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-4">
                     <div>
-                        <h2 className="text-xl font-bold text-dark mb-1 flex items-center">
+                        <h2 className={`text-xl font-bold ${activeTheme.classes.textHeading} mb-1 flex items-center`}>
                             <Icon name="leaf" className="h-6 w-6 mr-2 text-primary" />
                             Seasonal Produce Calendar
                         </h2>
@@ -98,7 +100,7 @@ const SeasonalCalendar: React.FC = () => {
                         className="bg-light h-12 w-full md:w-56 flex items-center justify-between px-3 rounded-lg border border-medium"
                         >
                         <span className="text-2xl mr-2">{selectedCountry.flag}</span>
-                        <span className="font-semibold text-dark flex-grow text-left">{selectedCountry.name}</span>
+                        <span className={`font-semibold ${activeTheme.classes.textColor} flex-grow text-left`}>{selectedCountry.name}</span>
                         <span className="ml-2 text-xs text-muted">&#9662;</span>
                         </button>
                         {isDropdownOpen && (
@@ -127,10 +129,10 @@ const SeasonalCalendar: React.FC = () => {
                         <button
                             key={month}
                             onClick={() => setSelectedMonth(month)}
-                            className={`px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-white focus:ring-black ${
+                            className={`px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary ${
                                 selectedMonth === month 
-                                ? "bg-black text-white shadow" 
-                                : "bg-light text-dark hover:bg-medium border border-medium"
+                                ? "bg-primary text-white shadow" 
+                                : `bg-light ${activeTheme.classes.textColor} hover:bg-medium border border-medium`
                             }`}
                         >
                             {month}

@@ -71,7 +71,7 @@ const PhoneEntry: React.FC<PhoneEntryProps> = ({ onContinue }) => {
                 value={phone}
                 onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
                 placeholder="Mobile number"
-                className="w-full h-14 bg-light rounded-lg pl-4 pr-12 text-lg focus:outline-none focus:ring-2 focus:ring-black"
+                className="w-full h-14 bg-light rounded-lg pl-4 pr-12 text-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 autoFocus
              />
              <span className="absolute top-1/2 right-4 -translate-y-1/2 text-muted text-sm">{selectedCountry.dialCode}</span>
@@ -80,7 +80,7 @@ const PhoneEntry: React.FC<PhoneEntryProps> = ({ onContinue }) => {
         <button
           type="submit"
           disabled={!phone.trim()}
-          className="w-full bg-black text-white font-bold py-4 rounded-lg hover:bg-gray-800 transition disabled:bg-gray-300"
+          className="w-full bg-primary text-white font-bold py-4 rounded-lg hover:bg-primary-dark transition disabled:bg-gray-300"
         >
           Continue
         </button>

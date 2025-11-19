@@ -4,19 +4,16 @@ import { Icon } from './common/Icon';
 import { Loader } from './common/Loader';
 import { GoogleGenAI, Chat } from '@google/genai';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
+import { useTheme } from '../contexts/ThemeContext';
 import type { ChatMessage } from '../types';
 
 
 interface WellnessProps {
     journalMessages: ChatMessage[];
-    setJournalMessages: (messages: ChatMessage[]) => void;
+    // Fix: Corrected the type for the state setter to allow functional updates.
+    // This resolves TypeScript errors when calling setJournalMessages with a function.
+    setJournalMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>>;
 }
-
-const sounds = [
-    { name: 'Gentle Rain', url: 'https://cdn.pixabay.com/audio/2022/10/18/audio_24732b846e.mp3' },
-    { name: 'Forest Ambience', url: 'https://cdn.pixabay.com/audio/2022/08/03/audio_5029e71168.mp3' },
-    { name: 'Crackling Fireplace', url: 'https://cdn.pixabay.com/audio/2023/10/05/audio_2b2c145a55.mp3' },
-] as const;
 
 const quotes = [
     "Cooking is like love. It should be entered into with abandon or not at all.",
@@ -27,10 +24,6 @@ const quotes = [
 ];
 
 const Wellness: React.FC<WellnessProps> = ({ journalMessages, setJournalMessages }) => {
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [activeSound, setActiveSound] = useState<(typeof sounds)[number] | null>(null);
-    const audioRef = useRef<HTMLAudioElement>(null);
-
     const [breathingState, setBreathingState] = useState('Breathe In');
     const [quote, setQuote] = useState('');
 
@@ -48,6 +41,7 @@ const Wellness: React.FC<WellnessProps> = ({ journalMessages, setJournalMessages
         stopListening,
         hasSupport: hasSpeechSupport,
     } = useSpeechRecognition();
+    const { activeTheme } = useTheme();
 
     useEffect(() => {
         setInputText(transcript);
@@ -92,54 +86,28 @@ const Wellness: React.FC<WellnessProps> = ({ journalMessages, setJournalMessages
         return () => clearInterval(interval);
     }, []);
 
-    // **FIXED AUDIO LOGIC**
-    useEffect(() => {
-        const audio = audioRef.current;
-        if (!audio) return;
-
-        if (activeSound && isPlaying) {
-            if (audio.src !== activeSound.url) {
-                audio.src = activeSound.url;
-            }
-            audio.play().catch(e => console.error("Error playing audio:", e));
-        } else {
-            audio.pause();
-        }
-    }, [isPlaying, activeSound]);
-
-    const handleSoundToggle = (sound: (typeof sounds)[number]) => {
-        if (activeSound?.name === sound.name) {
-            setIsPlaying(prev => !prev);
-        } else {
-            setActiveSound(sound);
-            setIsPlaying(true);
-        }
-    };
-
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!inputText.trim() || !chatRef.current || isReplying) return;
 
-        // Stop listening if it's active when sending a message
         if (isListening) {
             stopListening();
         }
     
         const userMessage: ChatMessage = { role: 'user', content: inputText.trim() };
-        const newMessages = [...journalMessages, userMessage];
-        setJournalMessages(newMessages);
+        // Use functional updates for safer state transitions
+        setJournalMessages(prevMessages => [...prevMessages, userMessage]);
         setInputText('');
-    
         setIsReplying(true);
     
         try {
           const response = await chatRef.current.sendMessage({ message: userMessage.content });
           const botMessage: ChatMessage = { role: 'bot', content: response.text };
-          setJournalMessages([...newMessages, botMessage]);
+          setJournalMessages(prevMessages => [...prevMessages, botMessage]);
         } catch (err) {
           console.error(err);
           const errorMessage: ChatMessage = { role: 'bot', content: "Sorry, I'm having trouble connecting right now." };
-          setJournalMessages([...newMessages, errorMessage]);
+          setJournalMessages(prevMessages => [...prevMessages, errorMessage]);
         } finally {
           setIsReplying(false);
         }
@@ -156,15 +124,14 @@ const Wellness: React.FC<WellnessProps> = ({ journalMessages, setJournalMessages
 
     return (
         <div className="space-y-6">
-            <audio ref={audioRef} loop />
             <Card>
                 <div className="flex items-center gap-4">
                     <div className="bg-primary/10 text-primary p-2 rounded-lg">
                         <Icon name="brain" className="h-8 w-8" />
                     </div>
                     <div>
-                        <h2 className="text-2xl font-bold text-dark">Chef's Wellness Hub</h2>
-                        <p className="text-muted">A space to pause, breathe, and find balance.</p>
+                        <h2 className={`text-2xl font-bold ${activeTheme.classes.textHeading}`}>Chef's Wellness Hub</h2>
+                        <p className={activeTheme.classes.textMuted}>A space to pause, breathe, and find balance.</p>
                     </div>
                 </div>
             </Card>
@@ -172,31 +139,11 @@ const Wellness: React.FC<WellnessProps> = ({ journalMessages, setJournalMessages
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="space-y-6">
                     <Card>
-                        <h3 className="text-lg font-semibold text-dark mb-4 flex items-center">
-                            <Icon name="sound-on" className="h-5 w-5 mr-2" />
-                            Calming Sounds
-                        </h3>
-                        <div className="flex flex-col sm:flex-row gap-2">
-                            {sounds.map(sound => (
-                                <button
-                                    key={sound.name}
-                                    onClick={() => handleSoundToggle(sound)}
-                                    className={`w-full flex items-center justify-center gap-2 p-3 rounded-lg border transition-colors ${
-                                        activeSound?.name === sound.name && isPlaying ? 'bg-black text-white border-black' : 'bg-light hover:bg-medium border-medium'
-                                    }`}
-                                >
-                                    <Icon name={activeSound?.name === sound.name && isPlaying ? 'pause' : 'play'} className="h-5 w-5" />
-                                    <span>{sound.name}</span>
-                                </button>
-                            ))}
-                        </div>
-                    </Card>
-                    <Card>
-                         <h3 className="text-lg font-semibold text-dark mb-4 flex items-center">
+                         <h3 className={`text-lg font-semibold ${activeTheme.classes.textHeading} mb-4 flex items-center`}>
                             <Icon name="quote" className="h-5 w-5 mr-2" />
                             Daily Inspiration
                         </h3>
-                        <blockquote className="text-center italic text-muted">
+                        <blockquote className={`text-center italic ${activeTheme.classes.textMuted}`}>
                            "{quote}"
                         </blockquote>
                     </Card>
@@ -204,7 +151,7 @@ const Wellness: React.FC<WellnessProps> = ({ journalMessages, setJournalMessages
 
                 <div className="space-y-6">
                      <Card className="flex flex-col items-center justify-center aspect-square">
-                        <h3 className="text-lg font-semibold text-dark mb-4">Guided Breathing</h3>
+                        <h3 className={`text-lg font-semibold ${activeTheme.classes.textHeading} mb-4`}>Guided Breathing</h3>
                         <div className="relative w-40 h-40 flex items-center justify-center">
                             <div className="absolute inset-0 bg-primary/10 rounded-full animate-pulse-slow"></div>
                             <div className={`absolute inset-2 bg-primary/20 rounded-full transition-transform duration-[4000ms] ease-in-out ${breathingState === 'Breathe In' || breathingState === 'Breathe Out' ? 'scale-100' : 'scale-50'}`}></div>
@@ -212,16 +159,16 @@ const Wellness: React.FC<WellnessProps> = ({ journalMessages, setJournalMessages
                                 {breathingState}
                             </span>
                         </div>
-                        <p className="text-muted mt-4 text-sm">Follow the prompt. 4 seconds per phase.</p>
+                        <p className={`${activeTheme.classes.textMuted} mt-4 text-sm`}>Follow the prompt. 4 seconds per phase.</p>
                     </Card>
                 </div>
             </div>
             
             <Card className="flex flex-col h-[60vh] max-h-[500px]">
-                <h3 className="text-lg font-semibold text-dark mb-4 flex-shrink-0">Mindful Moment Journal</h3>
+                <h3 className={`text-lg font-semibold ${activeTheme.classes.textHeading} mb-4 flex-shrink-0`}>Mindful Moment Journal</h3>
                 <div className="flex-grow overflow-y-auto mb-4 space-y-4 pr-2">
                     {journalMessages.length === 0 && (
-                        <div className="flex flex-col h-full items-center justify-center text-center text-muted">
+                        <div className={`flex flex-col h-full items-center justify-center text-center ${activeTheme.classes.textMuted}`}>
                             <Icon name="brain" className="h-12 w-12 mb-2"/>
                             <p>A private space to offload your thoughts.</p>
                             <p className="text-sm">Your mindful companion is listening.</p>
@@ -229,16 +176,16 @@ const Wellness: React.FC<WellnessProps> = ({ journalMessages, setJournalMessages
                     )}
                     {journalMessages.map((msg, index) => (
                     <div key={index} className={`flex items-start gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        {msg.role === 'bot' && <div className="w-8 h-8 flex-shrink-0 mt-1 rounded-full bg-light flex items-center justify-center"><Icon name="bot" className="h-5 w-5 text-muted"/></div>}
-                        <div className={`max-w-xs md:max-w-md px-4 py-3 rounded-2xl ${msg.role === 'user' ? "bg-black text-white rounded-br-lg" : 'bg-light text-dark rounded-bl-lg'}`}>
+                        {msg.role === 'bot' && <div className={`w-8 h-8 flex-shrink-0 mt-1 rounded-full flex items-center justify-center ${activeTheme.classes.inputBg}`}><Icon name="bot" className={`h-5 w-5 ${activeTheme.classes.textMuted}`}/></div>}
+                        <div className={`max-w-xs md:max-w-md px-4 py-3 rounded-2xl ${msg.role === 'user' ? "bg-primary text-white rounded-br-lg" : `${activeTheme.classes.inputBg} ${activeTheme.classes.inputText} rounded-bl-lg`}`}>
                             <p className="whitespace-pre-wrap">{msg.content}</p>
                         </div>
                     </div>
                     ))}
                     {isReplying && (
                         <div className="flex items-start gap-3 justify-start">
-                            <div className="w-8 h-8 flex-shrink-0 mt-1 rounded-full bg-light flex items-center justify-center"><Icon name="bot" className="h-5 w-5 text-muted"/></div>
-                            <div className="max-w-xs md:max-w-md px-4 py-3 rounded-2xl bg-light text-dark rounded-bl-lg">
+                            <div className={`w-8 h-8 flex-shrink-0 mt-1 rounded-full flex items-center justify-center ${activeTheme.classes.inputBg}`}><Icon name="bot" className={`h-5 w-5 ${activeTheme.classes.textMuted}`}/></div>
+                            <div className={`max-w-xs md:max-w-md px-4 py-3 rounded-2xl ${activeTheme.classes.inputBg} ${activeTheme.classes.inputText} rounded-bl-lg`}>
                                 <Loader />
                             </div>
                         </div>
@@ -246,13 +193,13 @@ const Wellness: React.FC<WellnessProps> = ({ journalMessages, setJournalMessages
                     <div ref={chatEndRef} />
                 </div>
 
-                <div className="flex-shrink-0 border-t border-medium pt-4">
+                <div className={`flex-shrink-0 border-t pt-4 ${activeTheme.classes.inputBorder}`}>
                     <form onSubmit={handleSendMessage} className="flex items-center gap-2">
                         {hasSpeechSupport && (
                              <button
                                 type="button"
                                 onClick={handleMicClick}
-                                className={`p-3 rounded-full transition-colors flex-shrink-0 ${isListening ? 'bg-red-500/20 text-red-500 animate-pulse' : 'text-muted hover:text-dark'}`}
+                                className={`p-3 rounded-full transition-colors flex-shrink-0 ${isListening ? 'bg-red-500/20 text-red-500 animate-pulse' : `${activeTheme.classes.textMuted} hover:${activeTheme.classes.textColor}`}`}
                                 aria-label={isListening ? 'Stop listening' : 'Start listening'}
                             >
                                 <Icon name="mic" className="h-6 w-6" />
@@ -264,12 +211,12 @@ const Wellness: React.FC<WellnessProps> = ({ journalMessages, setJournalMessages
                             onChange={(e) => setInputText(e.target.value)}
                             placeholder="Share what's on your mind..."
                             disabled={isReplying}
-                            className="flex-grow bg-light border-none rounded-full p-3 pl-5 focus:ring-2 focus:ring-black focus:outline-none disabled:bg-gray-200"
+                            className={`flex-grow border-none rounded-full p-3 pl-5 focus:ring-2 focus:outline-none disabled:bg-gray-200 ${activeTheme.classes.inputBg} ${activeTheme.classes.inputText} ${activeTheme.classes.placeholderText} focus:ring-primary`}
                         />
                         <button
                             type="submit"
                             disabled={isReplying || !inputText.trim()}
-                            className="bg-black text-white p-3 rounded-full hover:bg-gray-800 transition duration-300 disabled:bg-gray-400"
+                            className="bg-primary text-white p-3 rounded-full hover:bg-primary-dark transition duration-300 disabled:bg-gray-400"
                         >
                             {isReplying ? <Loader /> : <Icon name="send" className="h-6 w-6" />}
                         </button>

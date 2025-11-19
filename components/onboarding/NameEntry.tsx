@@ -28,7 +28,7 @@ const NameEntry: React.FC<NameEntryProps> = ({ onContinue, onBack }) => {
                 type="text"
                 value={firstName}
                 onChange={e => setFirstName(e.target.value)}
-                className="w-full mt-1 h-14 bg-light rounded-lg px-4 text-lg focus:outline-none focus:ring-2 focus:ring-black"
+                className="w-full mt-1 h-14 bg-light rounded-lg px-4 text-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 autoFocus
             />
         </div>
@@ -39,7 +39,7 @@ const NameEntry: React.FC<NameEntryProps> = ({ onContinue, onBack }) => {
                 type="text"
                 value={lastName}
                 onChange={e => setLastName(e.target.value)}
-                className="w-full mt-1 h-14 bg-light rounded-lg px-4 text-lg focus:outline-none focus:ring-2 focus:ring-black"
+                className="w-full mt-1 h-14 bg-light rounded-lg px-4 text-lg focus:outline-none focus:ring-2 focus:ring-primary"
             />
         </div>
       </div>
@@ -50,7 +50,7 @@ const NameEntry: React.FC<NameEntryProps> = ({ onContinue, onBack }) => {
         <button 
           onClick={onContinue}
           disabled={!canContinue}
-          className="bg-black text-white rounded-full p-4 disabled:bg-gray-300"
+          className="bg-primary text-white rounded-full p-4 disabled:bg-gray-300"
         >
             <Icon name="chevron-right" className="w-6 h-6" />
         </button>

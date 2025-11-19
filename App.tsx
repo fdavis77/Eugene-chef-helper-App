@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useCallback } from 'react';
 import MenuInspiration from './components/MenuInspiration';
 import ChefBot from './components/ChefBot';
 import HaccpCossh from './components/HaccpCossh';
@@ -12,32 +13,9 @@ import Onboarding from './components/onboarding/Onboarding';
 import SplashScreen from './components/SplashScreen';
 import { NavTab } from './constants';
 import { initDB, getNotes, saveNote, deleteNoteFromDB } from './utils/db';
-import type { TemperatureLog, CalendarDay, Note, HaccpLog, Ingredient, EmailClient, ProfileData, OpeningClosingCheck, CoolingLog, CosshLog, ProbeCalibrationLog, Recipe, StockTake, StockItem, RecentlyDeletedItem, LogType, ChatMessage } from './types';
-
-
-// Custom hook for managing state with Local Storage persistence
-function usePersistentState<T>(key: string, defaultValue: T): [T, React.Dispatch<React.SetStateAction<T>>] {
-  const [state, setState] = useState<T>(() => {
-    try {
-      const storedValue = window.localStorage.getItem(key);
-      return storedValue ? JSON.parse(storedValue) : defaultValue;
-    // Fix: Corrected malformed catch block which was causing multiple cascading errors.
-    } catch (error) {
-      console.error(`Error reading from localStorage for key "${key}":`, error);
-      return defaultValue;
-    }
-  });
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(key, JSON.stringify(state));
-    } catch (error) {
-      console.error(`Error writing to localStorage for key "${key}":`, error);
-    }
-  }, [key, state]);
-
-  return [state, setState];
-}
+import type { TemperatureLog, CalendarDay, Note, HaccpLog, Ingredient, EmailClient, ProfileData, OpeningClosingCheck, CoolingLog, CosshLog, ProbeCalibrationLog, Recipe, RecentlyDeletedItem, LogType, ChatMessage } from './types';
+import { useTheme } from './contexts/ThemeContext';
+import { usePersistentState } from './hooks/usePersistentState';
 
 
 const App: React.FC = () => {
@@ -53,8 +31,7 @@ const App: React.FC = () => {
   const [coolingLogs, setCoolingLogs] = usePersistentState<CoolingLog[]>('coolingLogs', []);
   const [cosshLogs, setCosshLogs] = usePersistentState<CosshLog[]>('cosshLogs', []);
   const [probeCalibrationLogs, setProbeCalibrationLogs] = usePersistentState<ProbeCalibrationLog[]>('probeCalibrationLogs', []);
-  const [visionRecipes, setVisionRecipes] = usePersistentState<Recipe[]>('visionRecipes', []);
-  const [stockTakes, setStockTakes] = usePersistentState<StockTake[]>('stockTakes', []);
+  const [savedRecipes, setSavedRecipes] = usePersistentState<Recipe[]>('savedRecipes', []);
   const [wellnessJournal, setWellnessJournal] = usePersistentState<ChatMessage[]>('wellnessJournal', []);
 
   const [notes, setNotes] = useState<Note[]>([]);
@@ -62,6 +39,7 @@ const App: React.FC = () => {
   const [masterOrderPlan, setMasterOrderPlan] = usePersistentState<Ingredient[]>('masterOrderPlan', []);
   const [emailClient, setEmailClient] = usePersistentState<EmailClient>('emailClient', 'default');
   const [profileData, setProfileData] = usePersistentState<ProfileData>('profileData', {});
+  const { themeName, setTheme, activeTheme } = useTheme();
 
 
   const [recentlyDeletedItem, setRecentlyDeletedItem] = useState<RecentlyDeletedItem | null>(null);
@@ -92,7 +70,7 @@ const App: React.FC = () => {
   }, [recentlyDeletedItem]);
 
 
-  const handleAddFoodLog = (logData: Omit<TemperatureLog, 'id' | 'timestamp'>) => {
+  const handleAddFoodLog = useCallback((logData: Omit<TemperatureLog, 'id' | 'timestamp'>) => {
     setFoodLogs(prevLogs => [
       {
         ...logData,
@@ -101,9 +79,9 @@ const App: React.FC = () => {
       },
       ...prevLogs,
     ]);
-  };
+  }, [setFoodLogs]);
 
-  const handleAddHaccpLog = (logData: Omit<HaccpLog, 'id' | 'date' | 'time' | 'checkedBy' | 'correctiveAction'>) => {
+  const handleAddHaccpLog = useCallback((logData: Omit<HaccpLog, 'id' | 'date' | 'time' | 'checkedBy' | 'correctiveAction'>) => {
     const now = new Date();
     setHaccpLogs(prev => [
       {
@@ -116,14 +94,14 @@ const App: React.FC = () => {
       },
       ...prev,
     ].sort((a, b) => new Date(`${b.date}T${b.time}`).getTime() - new Date(`${a.date}T${a.time}`).getTime()));
-  };
+  }, [setHaccpLogs]);
   
-  const handleUpdateHaccpLog = (updatedLog: HaccpLog) => {
+  const handleUpdateHaccpLog = useCallback((updatedLog: HaccpLog) => {
      setHaccpLogs(prev => prev.map(log => log.id === updatedLog.id ? updatedLog : log));
-  };
+  }, [setHaccpLogs]);
 
   // --- GENERIC DELETE & RESTORE ---
-  const createDeleteHandler = <T extends { id: number }>(
+  const createDeleteHandler = useCallback(<T extends HaccpLog | OpeningClosingCheck | CoolingLog | CosshLog | ProbeCalibrationLog>(
     logType: LogType,
     state: T[],
     setter: React.Dispatch<React.SetStateAction<T[]>>
@@ -133,37 +111,18 @@ const App: React.FC = () => {
       setter(prev => prev.filter(item => item.id !== id));
       setRecentlyDeletedItem({ type: logType, item: itemToDelete });
     }
-  };
+  }, []);
 
-  const handleDeleteHaccpLog = createDeleteHandler('HaccpLog', haccpLogs, setHaccpLogs);
-  const handleDeleteOpeningClosingLog = createDeleteHandler('OpeningClosingCheck', openingClosingLogs, setOpeningClosingLogs);
-  const handleDeleteCoolingLog = createDeleteHandler('CoolingLog', coolingLogs, setCoolingLogs);
-  const handleDeleteCosshLog = createDeleteHandler('CosshLog', cosshLogs, setCosshLogs);
-  const handleDeleteProbeCalibrationLog = createDeleteHandler('ProbeCalibrationLog', probeCalibrationLogs, setProbeCalibrationLogs);
+  const handleDeleteHaccpLog = useCallback(createDeleteHandler('HaccpLog', haccpLogs, setHaccpLogs), [createDeleteHandler, haccpLogs, setHaccpLogs]);
+  const handleDeleteOpeningClosingLog = useCallback(createDeleteHandler('OpeningClosingCheck', openingClosingLogs, setOpeningClosingLogs), [createDeleteHandler, openingClosingLogs, setOpeningClosingLogs]);
+  const handleDeleteCoolingLog = useCallback(createDeleteHandler('CoolingLog', coolingLogs, setCoolingLogs), [createDeleteHandler, coolingLogs, setCoolingLogs]);
+  const handleDeleteCosshLog = useCallback(createDeleteHandler('CosshLog', cosshLogs, setCosshLogs), [createDeleteHandler, cosshLogs, setCosshLogs]);
+  const handleDeleteProbeCalibrationLog = useCallback(createDeleteHandler('ProbeCalibrationLog', probeCalibrationLogs, setProbeCalibrationLogs), [createDeleteHandler, probeCalibrationLogs, setProbeCalibrationLogs]);
   
-  const handleDeleteStockItem = (stockTakeId: number, itemId: number) => {
-    const stockTake = stockTakes.find(st => st.id === stockTakeId);
-    if (!stockTake) return;
-    const itemToDelete = stockTake.items.find(i => i.id === itemId);
-    if (!itemToDelete) return;
-
-    setRecentlyDeletedItem({
-      type: 'StockItem',
-      item: itemToDelete,
-      context: { stockTakeId }
-    });
-
-    const updatedStockTake = {
-      ...stockTake,
-      items: stockTake.items.filter(i => i.id !== itemId)
-    };
-    handleUpdateStockTake(updatedStockTake);
-  };
-
-  const handleRestoreLog = () => {
+  const handleRestoreLog = useCallback(() => {
     if (!recentlyDeletedItem) return;
 
-    const { type, item, context } = recentlyDeletedItem;
+    const { type, item } = recentlyDeletedItem;
     
     switch (type) {
       case 'HaccpLog':
@@ -181,48 +140,44 @@ const App: React.FC = () => {
       case 'ProbeCalibrationLog':
         setProbeCalibrationLogs(prev => [...prev, item as ProbeCalibrationLog].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
         break;
-      case 'StockItem':
-        if (context?.stockTakeId) {
-          const stockTakeToUpdate = stockTakes.find(st => st.id === context.stockTakeId);
-          if (stockTakeToUpdate) {
-            const restoredItems = [...stockTakeToUpdate.items, item as StockItem].sort((a, b) => a.name.localeCompare(b.name));
-            handleUpdateStockTake({ ...stockTakeToUpdate, items: restoredItems });
-          }
-        }
-        break;
     }
     setRecentlyDeletedItem(null);
-  };
+  }, [recentlyDeletedItem, setCoolingLogs, setCosshLogs, setHaccpLogs, setOpeningClosingLogs, setProbeCalibrationLogs]);
 
   // Handlers for new log types
-  const handleAddOpeningClosingLog = (logData: Omit<OpeningClosingCheck, 'id'>) => setOpeningClosingLogs(prev => [{ ...logData, id: Date.now() }, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-  const handleUpdateOpeningClosingLog = (updatedLog: OpeningClosingCheck) => setOpeningClosingLogs(prev => prev.map(log => log.id === updatedLog.id ? updatedLog : log));
-  const handleAddCoolingLog = (logData: Omit<CoolingLog, 'id'>) => setCoolingLogs(prev => [{ ...logData, id: Date.now() }, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-  const handleUpdateCoolingLog = (updatedLog: CoolingLog) => setCoolingLogs(prev => prev.map(log => log.id === updatedLog.id ? updatedLog : log));
-  const handleAddCosshLog = (logData: Omit<CosshLog, 'id'>) => setCosshLogs(prev => [{ ...logData, id: Date.now() }, ...prev].sort((a, b) => new Date(b.dateReceived).getTime() - new Date(a.dateReceived).getTime()));
-  const handleUpdateCosshLog = (updatedLog: CosshLog) => setCosshLogs(prev => prev.map(log => log.id === updatedLog.id ? updatedLog : log));
-  const handleAddProbeCalibrationLog = (logData: Omit<ProbeCalibrationLog, 'id'>) => setProbeCalibrationLogs(prev => [{ ...logData, id: Date.now() }, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-  const handleUpdateProbeCalibrationLog = (updatedLog: ProbeCalibrationLog) => setProbeCalibrationLogs(prev => prev.map(log => log.id === updatedLog.id ? updatedLog : log));
+  const handleAddOpeningClosingLog = useCallback((logData: Omit<OpeningClosingCheck, 'id'>) => setOpeningClosingLogs(prev => [{ ...logData, id: Date.now() }, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())), [setOpeningClosingLogs]);
+  const handleUpdateOpeningClosingLog = useCallback((updatedLog: OpeningClosingCheck) => setOpeningClosingLogs(prev => prev.map(log => log.id === updatedLog.id ? updatedLog : log)), [setOpeningClosingLogs]);
+  const handleAddCoolingLog = useCallback((logData: Omit<CoolingLog, 'id'>) => setCoolingLogs(prev => [{ ...logData, id: Date.now() }, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())), [setCoolingLogs]);
+  const handleUpdateCoolingLog = useCallback((updatedLog: CoolingLog) => setCoolingLogs(prev => prev.map(log => log.id === updatedLog.id ? updatedLog : log)), [setCoolingLogs]);
+  const handleAddCosshLog = useCallback((logData: Omit<CosshLog, 'id'>) => setCosshLogs(prev => [{ ...logData, id: Date.now() }, ...prev].sort((a, b) => new Date(b.dateReceived).getTime() - new Date(a.dateReceived).getTime())), [setCosshLogs]);
+  const handleUpdateCosshLog = useCallback((updatedLog: CosshLog) => setCosshLogs(prev => prev.map(log => log.id === updatedLog.id ? updatedLog : log)), [setCosshLogs]);
+  const handleAddProbeCalibrationLog = useCallback((logData: Omit<ProbeCalibrationLog, 'id'>) => setProbeCalibrationLogs(prev => [{ ...logData, id: Date.now() }, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())), [setProbeCalibrationLogs]);
+  const handleUpdateProbeCalibrationLog = useCallback((updatedLog: ProbeCalibrationLog) => setProbeCalibrationLogs(prev => prev.map(log => log.id === updatedLog.id ? updatedLog : log)), [setProbeCalibrationLogs]);
 
-  const handleSaveVisionRecipe = (recipe: Recipe) => {
-    if (!visionRecipes.find(r => r.title === recipe.title && r.imageUrl === recipe.imageUrl)) {
-        setVisionRecipes(prev => [recipe, ...prev]);
-    }
-  };
+  const handleSaveRecipe = useCallback((recipe: Recipe) => {
+    setSavedRecipes(prev => {
+        // Check if it already exists by ID
+        const existingIndex = prev.findIndex(r => r.id === recipe.id);
+        
+        if (existingIndex >= 0) {
+            // Update existing
+            const newRecipes = [...prev];
+            newRecipes[existingIndex] = recipe;
+            return newRecipes;
+        } else {
+            // Add new, ensure ID
+            const newRecipe = { ...recipe, id: recipe.id || Date.now().toString() };
+            return [newRecipe, ...prev];
+        }
+    });
+  }, [setSavedRecipes]);
 
-    // Handlers for Stock Takes
-  const handleAddStockTake = (stockTake: Omit<StockTake, 'id'>) => {
-    setStockTakes(prev => [{ ...stockTake, id: Date.now() }, ...prev].sort((a, b) => a.date.localeCompare(b.date)));
-  };
-  const handleUpdateStockTake = (updatedStockTake: StockTake) => {
-    setStockTakes(prev => prev.map(st => st.id === updatedStockTake.id ? updatedStockTake : st));
-  };
-  const handleDeleteStockTake = (id: number) => {
-    setStockTakes(prev => prev.filter(st => st.id !== id));
-  };
+  const handleDeleteRecipe = useCallback((id: string) => {
+      setSavedRecipes(prev => prev.filter(r => r.id !== id));
+  }, [setSavedRecipes]);
 
 
-  const handleAddNote = async (noteContent: string, imageUrl?: string) => {
+  const handleAddNote = useCallback(async (noteContent: string, imageUrl?: string) => {
     const newNote: Note = {
       id: Date.now().toString(),
       content: noteContent,
@@ -231,28 +186,28 @@ const App: React.FC = () => {
     };
     await saveNote(newNote);
     setNotes(prev => [newNote, ...prev]);
-  };
+  }, []);
   
-  const handleUpdateNote = async (id: string, content: string) => {
+  const handleUpdateNote = useCallback(async (id: string, content: string) => {
     const noteToUpdate = notes.find(n => n.id === id);
     if (noteToUpdate) {
       const updatedNote = { ...noteToUpdate, content };
       await saveNote(updatedNote);
       setNotes(prev => prev.map(note => (note.id === id ? updatedNote : note)));
     }
-  };
+  }, [notes]);
 
-  const handleDeleteNote = async (id: string) => {
+  const handleDeleteNote = useCallback(async (id: string) => {
     await deleteNoteFromDB(id);
     setNotes(prev => prev.filter(note => note.id !== id));
-  };
+  }, []);
 
 
-  const handleUpdateCalendar = (date: string, data: CalendarDay) => {
+  const handleUpdateCalendar = useCallback((date: string, data: CalendarDay) => {
     setPlannedItems(prev => ({ ...prev, [date]: data }));
-  };
+  }, [setPlannedItems]);
 
-  const handleRemoveRotaEntry = (date: string, indexToRemove: number) => {
+  const handleRemoveRotaEntry = useCallback((date: string, indexToRemove: number) => {
     setPlannedItems(prev => {
       const dayData = prev[date];
       if (!dayData?.rota) return prev;
@@ -262,9 +217,9 @@ const App: React.FC = () => {
         [date]: { ...dayData, rota: newRota },
       };
     });
-  };
+  }, [setPlannedItems]);
   
-  const handleAddToMasterOrderPlan = (itemsToAdd: Ingredient[]) => {
+  const handleAddToMasterOrderPlan = useCallback((itemsToAdd: Ingredient[]) => {
     setMasterOrderPlan(prevPlan => {
       const planCopy = [...prevPlan];
       itemsToAdd.forEach(itemToAdd => {
@@ -283,20 +238,20 @@ const App: React.FC = () => {
       });
       return planCopy;
     });
-  };
+  }, [setMasterOrderPlan]);
 
-  const handleClearMasterOrderPlan = () => {
+  const handleClearMasterOrderPlan = useCallback(() => {
     setMasterOrderPlan([]);
-  };
+  }, [setMasterOrderPlan]);
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     setIsAuthenticated(false);
     setIsSettingsOpen(false);
-  };
+  }, [setIsAuthenticated]);
 
-  const handleUpdateProfile = (data: Partial<ProfileData>) => {
+  const handleUpdateProfile = useCallback((data: Partial<ProfileData>) => {
     setProfileData(prev => ({ ...prev, ...data }));
-  };
+  }, [setProfileData]);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -310,6 +265,8 @@ const App: React.FC = () => {
             onAddNote={handleAddNote}
             plannedItems={plannedItems}
             onUpdateCalendar={handleUpdateCalendar}
+            haccpLogs={haccpLogs}
+            openingClosingLogs={openingClosingLogs}
           />
         );
       case NavTab.Planner:
@@ -325,7 +282,9 @@ const App: React.FC = () => {
             onAddToMasterOrderPlan={handleAddToMasterOrderPlan}
             onClearMasterOrderPlan={handleClearMasterOrderPlan}
             emailClient={emailClient}
-            visionRecipes={visionRecipes}
+            savedRecipes={savedRecipes}
+            onSaveRecipe={handleSaveRecipe}
+            onDeleteRecipe={handleDeleteRecipe}
           />
         );
       case NavTab.Seasonal:
@@ -353,17 +312,12 @@ const App: React.FC = () => {
                   onAddProbeCalibrationLog={handleAddProbeCalibrationLog}
                   onUpdateProbeCalibrationLog={handleUpdateProbeCalibrationLog}
                   onDeleteProbeCalibrationLog={handleDeleteProbeCalibrationLog}
-                  stockTakes={stockTakes}
-                  onAddStockTake={handleAddStockTake}
-                  onUpdateStockTake={handleUpdateStockTake}
-                  onDeleteStockTake={handleDeleteStockTake}
-                  onDeleteStockItem={handleDeleteStockItem}
                   recentlyDeletedItem={recentlyDeletedItem}
                   onRestoreLog={handleRestoreLog}
                 />;
       
       case NavTab.Vision:
-        return <SousChefVision onAddNote={handleAddNote} onSaveVisionRecipe={handleSaveVisionRecipe} />;
+        return <SousChefVision onAddNote={handleAddNote} onSaveRecipe={handleSaveRecipe} />;
       
       case NavTab.Wellness:
         return <Wellness journalMessages={wellnessJournal} setJournalMessages={setWellnessJournal} />;
@@ -382,7 +336,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen font-sans bg-light">
+    <div className={`min-h-screen font-sans ${activeTheme.classes.appBg} ${activeTheme.classes.textColor}`}>
       <TopBar onSettingsClick={() => setIsSettingsOpen(true)} />
       <main className="p-4 sm:p-6 md:p-8 pb-28">
         {renderContent()}
@@ -394,6 +348,8 @@ const App: React.FC = () => {
           onLogout={handleLogout}
           profileData={profileData}
           onUpdateProfile={handleUpdateProfile}
+          currentTheme={themeName}
+          onSetTheme={setTheme}
       />
     </div>
   );

@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import type { Ingredient, Recipe, SeasonalProduce, HaccpLog, TemperatureLog, StockTake } from '../types';
+import type { Ingredient, Recipe, SeasonalProduce, HaccpLog, TemperatureLog } from '../types';
 
 const recipeSchema = {
   type: Type.OBJECT,
@@ -78,8 +78,19 @@ export const getIngredientList = async (recipe: string): Promise<Ingredient[]> =
     });
 
     try {
-        const jsonString = response.text.trim();
-        return JSON.parse(jsonString) as Ingredient[];
+        const text = response.text;
+        // Robustly extract the JSON array: look for the first '[' and the last ']'
+        const startIndex = text.indexOf('[');
+        const endIndex = text.lastIndexOf(']');
+
+        if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
+            const jsonString = text.substring(startIndex, endIndex + 1);
+            return JSON.parse(jsonString) as Ingredient[];
+        }
+
+        // Fallback: simple markdown strip if brackets aren't clearly found
+        const cleanedText = text.replace(/```json\n?|```/g, '').trim();
+        return JSON.parse(cleanedText) as Ingredient[];
     } catch (e) {
         console.error("Failed to parse ingredient list JSON:", e);
         throw new Error("Could not parse ingredient list from AI response.");
@@ -221,31 +232,4 @@ export const getRecipeFromImage = async (prompt: string, imageBase64: string, mi
     console.error("Failed to parse recipe from image JSON:", e);
     throw new Error("Could not parse recipe from AI response.");
   }
-};
-
-export const getStockTakeSummary = async (stockTake: StockTake, totalValue: number): Promise<string> => {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    
-    const prompt = `
-      As a financial analyst for a professional kitchen, analyze the following monthly stock take data.
-      The total inventory value is ${totalValue.toFixed(2)}.
-
-      Provide a brief, actionable financial summary in Markdown format. Your summary should include:
-      1.  A "Financial Overview" section with a sentence about the total stock value.
-      2.  A "Highest Value Items" section listing the top 3-5 items contributing most to the total value.
-      3.  An "Insights & Recommendations" section with one or two clear suggestions for cost-saving, inventory optimization, or menu planning based on the data. For example, suggest using up high-quantity items or being mindful of expensive, slow-moving stock.
-
-      Stock Take Items:
-      ${JSON.stringify(stockTake.items.map(item => ({ name: item.name, category: item.category, quantity: item.quantityOnHand, unitPrice: item.unitPrice, totalValue: item.quantityOnHand * item.unitPrice })), null, 2)}
-    `;
-
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: {
-            systemInstruction: "You are a helpful financial analyst AI for chefs. Provide concise, data-driven insights based on the stock take information provided. Use Markdown for clear formatting.",
-        },
-    });
-
-    return response.text;
 };
