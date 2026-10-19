@@ -32,7 +32,7 @@ const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, onAddFoodLog, on
   useEffect(() => {
     if (!isOpen) return;
     chatHistoryRef.current = [];
-    setIsKeySelected(!!process.env.API_KEY);
+    setIsKeySelected(!!import.meta.env.VITE_ANTHROPIC_API_KEY);
     setIsKeyChecked(true);
   }, [isOpen]);
 
@@ -84,7 +84,7 @@ const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, onAddFoodLog, on
     setIsReplying(true);
 
     try {
-      const claude = new Anthropic({ apiKey: process.env.API_KEY, dangerouslyAllowBrowser: true });
+      const claude = new Anthropic({ apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY, dangerouslyAllowBrowser: true });
       const response = await claude.messages.create({
         model: 'claude-haiku-5-5',
         max_tokens: 2048,

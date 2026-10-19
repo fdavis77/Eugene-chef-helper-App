@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Ingredient, Recipe, SeasonalProduce, HaccpLog, TemperatureLog } from '../types';
 
-const client = new Anthropic({ apiKey: process.env.API_KEY, dangerouslyAllowBrowser: true });
+const client = new Anthropic({ apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY, dangerouslyAllowBrowser: true });
 const MODEL = 'claude-haiku-5-5';
 
 const parseJSON = <T>(text: string): T => {

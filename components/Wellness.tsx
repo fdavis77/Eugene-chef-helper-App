@@ -91,7 +91,7 @@ const Wellness: React.FC<WellnessProps> = ({ journalMessages, setJournalMessages
         setIsReplying(true);
 
         try {
-          const claude = new Anthropic({ apiKey: process.env.API_KEY, dangerouslyAllowBrowser: true });
+          const claude = new Anthropic({ apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY, dangerouslyAllowBrowser: true });
           const response = await claude.messages.create({
             model: 'claude-haiku-5-5',
             max_tokens: 1024,

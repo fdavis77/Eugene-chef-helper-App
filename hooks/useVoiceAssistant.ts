@@ -165,7 +165,7 @@ export const useVoiceAssistant = ({
       setError('Voice recognition is not supported in this browser. Please use Chrome or Edge.');
       return;
     }
-    if (!process.env.API_KEY) {
+    if (!import.meta.env.VITE_ANTHROPIC_API_KEY) {
       onKeyError();
       return;
     }
@@ -181,7 +181,7 @@ export const useVoiceAssistant = ({
       return;
     }
 
-    clientRef.current = new Anthropic({ apiKey: process.env.API_KEY, dangerouslyAllowBrowser: true });
+    clientRef.current = new Anthropic({ apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY, dangerouslyAllowBrowser: true });
     synthRef.current = window.speechSynthesis;
     activeRef.current = true;
 

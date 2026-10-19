@@ -62,7 +62,7 @@ const ChefBot: React.FC<ChefBotProps> = ({
   useEffect(() => {
     chatHistoryRef.current = [];
     const checkKey = () => {
-      setIsKeySelected(!!process.env.API_KEY);
+      setIsKeySelected(!!import.meta.env.VITE_ANTHROPIC_API_KEY);
       setIsKeyChecked(true);
     };
     checkKey();
@@ -106,7 +106,7 @@ const ChefBot: React.FC<ChefBotProps> = ({
   };
 
   const handleSelectKey = () => {
-    setIsKeySelected(!!process.env.API_KEY);
+    setIsKeySelected(!!import.meta.env.VITE_ANTHROPIC_API_KEY);
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -120,7 +120,7 @@ const ChefBot: React.FC<ChefBotProps> = ({
     setIsReplying(true);
 
     try {
-      const claude = new Anthropic({ apiKey: process.env.API_KEY, dangerouslyAllowBrowser: true });
+      const claude = new Anthropic({ apiKey: import.meta.env.VITE_ANTHROPIC_API_KEY, dangerouslyAllowBrowser: true });
       const response = await claude.messages.create({
         model: 'claude-haiku-5-5',
         max_tokens: 2048,
