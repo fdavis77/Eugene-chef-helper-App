@@ -16,7 +16,7 @@ const isValidThemeName = (name: any): name is ThemeName => {
 };
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [storedTheme, setTheme] = usePersistentState<ThemeName>('themeName', 'light');
+  const [storedTheme, setTheme] = usePersistentState<ThemeName>('themeName', 'dark');
 
   // Validate theme from localStorage, default to 'light' if it's invalid (e.g., from a previous session)
   const themeName = isValidThemeName(storedTheme) ? storedTheme : 'light';

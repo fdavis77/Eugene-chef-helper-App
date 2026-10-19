@@ -20,14 +20,14 @@ const navItems = [
 const BottomNav: React.FC<BottomNavProps> = ({ activeTab, setActiveTab }) => {
   const { activeTheme } = useTheme();
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-medium z-20">
+    <nav className={`fixed bottom-0 left-0 right-0 ${activeTheme.classes.headerBg}/90 backdrop-blur-xl border-t ${activeTheme.classes.cardBorder} z-20`}>
       <div className="container mx-auto flex justify-around">
         {navItems.map((item) => (
           <button
             key={item.id}
             onClick={() => setActiveTab(item.id)}
-            className={`flex flex-col items-center justify-center pt-3 pb-2 w-full transition-colors duration-200 text-sm ${
-              activeTab === item.id ? 'text-primary' : `${activeTheme.classes.textMuted} hover:${activeTheme.classes.textColor}`
+            className={`flex flex-col items-center justify-center pt-3 pb-2 w-full transition-all duration-200 text-xs font-medium ${
+              activeTab === item.id ? 'text-primary' : `${activeTheme.classes.textMuted} hover:text-eugene-cream`
             }`}
             aria-current={activeTab === item.id ? 'page' : undefined}
           >

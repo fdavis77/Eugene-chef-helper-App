@@ -2,6 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --gold: #C8A96E;
+  --bg: #0F0E0C;
+  --surface: #1A1714;
+  --surface2: #242018;
+  --cream: #F0E8D8;
+  --muted: #A89A82;
+  --border: #3A3228;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--cream);
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'Playfair Display', serif;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }

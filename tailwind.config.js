@@ -7,12 +7,18 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Lato', 'sans-serif'],
-        serif: ['Playfair Display', 'serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        serif: ['Inter', 'system-ui', 'sans-serif'],
       },
       colors: {
-        primary: '#06C167',
-        'primary-dark': '#05A559',
+        primary: '#C8A96E',
+        'primary-dark': '#B89660',
+        'eugene-bg': '#0F0E0C',
+        'eugene-surface': '#1A1714',
+        'eugene-surface2': '#242018',
+        'eugene-cream': '#F0E8D8',
+        'eugene-muted': '#A89A82',
+        'eugene-border': '#3A3228',
         light: '#F6F6F6',
         medium: '#EEEEEE',
         dark: '#1A1A1A',
