@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Card } from './common/Card';
 import { Icon } from './common/Icon';
 import { Loader } from './common/Loader';
-import { getHaccpInfo, getSafetyAudit } from '../services/geminiService';
+import { getHaccpInfo, getSafetyAudit } from '../services/claudeService';
 import { useTheme } from '../contexts/ThemeContext';
 import type { HaccpLog, TemperatureLog, OpeningClosingCheck, CoolingLog, CosshLog, ProbeCalibrationLog, RecentlyDeletedItem } from '../types';
 import { MarkdownRenderer } from './common/MarkdownRenderer';

@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { Card } from './common/Card';
 import { Icon } from './common/Icon';
 import { Loader } from './common/Loader';
-import { getIngredientList } from '../services/geminiService';
+import { getIngredientList } from '../services/claudeService';
 import { useTheme } from '../contexts/ThemeContext';
 import type { Recipe, Ingredient, RecipeCosting } from '../types';
 

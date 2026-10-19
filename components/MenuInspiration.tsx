@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { getMenuInspiration, getIngredientList } from '../services/geminiService';
+import { getMenuInspiration, getIngredientList } from '../services/claudeService';
 import { Card } from './common/Card';
 import { Loader } from './common/Loader';
 import { Icon } from './common/Icon';

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Card } from './common/Card';
 import { Icon } from './common/Icon';
 import { Loader } from './common/Loader';
-import { GoogleGenAI, Chat } from '@google/genai';
+import Anthropic from '@anthropic-ai/sdk';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { useTheme } from '../contexts/ThemeContext';
 import type { ChatMessage } from '../types';
@@ -30,7 +30,7 @@ const Wellness: React.FC<WellnessProps> = ({ journalMessages, setJournalMessages
     // Chat state
     const [inputText, setInputText] = useState('');
     const [isReplying, setIsReplying] = useState(false);
-    const chatRef = useRef<Chat | null>(null);
+    const chatHistoryRef = useRef<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
     const chatEndRef = useRef<HTMLDivElement>(null);
 
     // Speech Recognition hook
@@ -52,18 +52,10 @@ const Wellness: React.FC<WellnessProps> = ({ journalMessages, setJournalMessages
         // Set initial quote
         setQuote(quotes[Math.floor(Math.random() * quotes.length)]);
 
-        // Initialize chat
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        chatRef.current = ai.chats.create({
-            model: 'gemini-2.5-flash',
-            config: {
-                systemInstruction: "You are a mindful companion. Your purpose is to be a supportive, non-judgmental listener, providing a safe space for the user to express their thoughts and feelings. Do not give unsolicited advice. Instead, ask gentle, open-ended questions to encourage reflection (e.g., 'How did that feel?', 'What was on your mind then?', 'Is there more you'd like to share about that?'). Keep your responses calm, brief, and empathetic. You are a journal that listens.",
-            },
-            history: journalMessages.map(m => ({
-                role: m.role === 'bot' ? 'model' : 'user',
-                parts: [{ text: m.content }],
-            })),
-        });
+        chatHistoryRef.current = journalMessages.map(m => ({
+            role: m.role === 'bot' ? 'assistant' as const : 'user' as const,
+            content: m.content,
+        }));
 
     // We only want this to run once on mount, so we disable the exhaustive-deps rule.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -88,21 +80,28 @@ const Wellness: React.FC<WellnessProps> = ({ journalMessages, setJournalMessages
 
     const handleSendMessage = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!inputText.trim() || !chatRef.current || isReplying) return;
+        if (!inputText.trim() || isReplying) return;
 
-        if (isListening) {
-            stopListening();
-        }
-    
+        if (isListening) stopListening();
+
         const userMessage: ChatMessage = { role: 'user', content: inputText.trim() };
-        // Use functional updates for safer state transitions
         setJournalMessages(prevMessages => [...prevMessages, userMessage]);
+        chatHistoryRef.current.push({ role: 'user', content: inputText.trim() });
         setInputText('');
         setIsReplying(true);
-    
+
         try {
-          const response = await chatRef.current.sendMessage({ message: userMessage.content });
-          const botMessage: ChatMessage = { role: 'bot', content: response.text };
+          const claude = new Anthropic({ apiKey: process.env.API_KEY, dangerouslyAllowBrowser: true });
+          const response = await claude.messages.create({
+            model: 'claude-haiku-5-5',
+            max_tokens: 1024,
+            system: "You are a mindful companion. Be a supportive, non-judgmental listener. Do not give unsolicited advice. Ask gentle, open-ended questions to encourage reflection. Keep responses calm, brief, and empathetic.",
+            messages: chatHistoryRef.current,
+          });
+          const block = response.content[0];
+          const text = block.type === 'text' ? block.text : "Sorry, I'm having trouble connecting right now.";
+          chatHistoryRef.current.push({ role: 'assistant', content: text });
+          const botMessage: ChatMessage = { role: 'bot', content: text };
           setJournalMessages(prevMessages => [...prevMessages, botMessage]);
         } catch (err) {
           console.error(err);

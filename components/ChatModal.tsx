@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GoogleGenAI, Chat } from '@google/genai';
-import { useGeminiLive } from '../hooks/useGeminiLive';
+import Anthropic from '@anthropic-ai/sdk';
+import { useVoiceAssistant } from '../hooks/useVoiceAssistant';
 import { Loader } from './common/Loader';
 import { Icon } from './common/Icon';
 import AnimatedAvatar from './AnimatedAvatar';
@@ -27,40 +27,27 @@ const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, onAddFoodLog, on
   const [isKeySelected, setIsKeySelected] = useState(false);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const chatRef = useRef<Chat | null>(null);
+  const chatHistoryRef = useRef<Array<{ role: 'user' | 'assistant'; content: string }>>([]);
 
   useEffect(() => {
     if (!isOpen) return;
-
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    chatRef.current = ai.chats.create({
-      model: 'gemini-2.5-flash',
-      config: {
-        systemInstruction: 'You are Eugene AI Chef, a concise and helpful AI assistant for a professional chef. Provide direct and helpful answers.',
-      },
-    });
-
-    const checkKey = async () => {
-        if (window.aistudio && await window.aistudio.hasSelectedApiKey()) {
-            setIsKeySelected(true);
-        }
-        setIsKeyChecked(true);
-    };
-    checkKey();
+    chatHistoryRef.current = [];
+    setIsKeySelected(!!process.env.API_KEY);
+    setIsKeyChecked(true);
   }, [isOpen]);
 
   const handleTranscriptUpdate = (newMessage: ChatMessage) => {
     setMessages(prev => [...prev, newMessage]);
   }
 
-  const { 
-    isSessionActive, 
+  const {
+    isSessionActive,
     isConnecting,
-    isBotSpeaking, 
-    error, 
-    startConversation, 
-    stopConversation 
-  } = useGeminiLive({ 
+    isBotSpeaking,
+    error,
+    startConversation,
+    stopConversation
+  } = useVoiceAssistant({
     onAddFoodLog,
     onAddHaccpLog,
     onTranscriptUpdate: handleTranscriptUpdate,
@@ -86,25 +73,28 @@ const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, onAddFoodLog, on
     else startConversation();
   };
 
-  const handleSelectKey = async () => {
-    if (window.aistudio) {
-        await window.aistudio.openSelectKey();
-        setIsKeySelected(true);
-    }
-  };
-
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputText.trim() || !chatRef.current || isSessionActive) return;
+    if (!inputText.trim() || isSessionActive) return;
 
     const userMessage: ChatMessage = { role: 'user', content: inputText.trim() };
     setMessages(prev => [...prev, userMessage]);
+    chatHistoryRef.current.push({ role: 'user', content: inputText.trim() });
     setInputText('');
     setIsReplying(true);
 
     try {
-      const response = await chatRef.current.sendMessage({ message: userMessage.content });
-      const botMessage: ChatMessage = { role: 'bot', content: response.text };
+      const claude = new Anthropic({ apiKey: process.env.API_KEY, dangerouslyAllowBrowser: true });
+      const response = await claude.messages.create({
+        model: 'claude-haiku-5-5',
+        max_tokens: 2048,
+        system: 'You are Eugene AI Chef, a concise and helpful AI assistant for a professional chef. Provide direct and helpful answers.',
+        messages: chatHistoryRef.current,
+      });
+      const block = response.content[0];
+      const text = block.type === 'text' ? block.text : "Sorry, I encountered an error.";
+      chatHistoryRef.current.push({ role: 'assistant', content: text });
+      const botMessage: ChatMessage = { role: 'bot', content: text };
       setMessages(prev => [...prev, botMessage]);
     } catch (err) {
       console.error(err);
@@ -118,11 +108,7 @@ const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, onAddFoodLog, on
   const renderVoiceButton = () => {
     if (!isKeyChecked) return null;
     if (!isKeySelected) {
-      return (
-        <button onClick={handleSelectKey} className="text-primary text-sm font-semibold">
-          Select API Key for Voice
-        </button>
-      );
+      return <p className="text-sm text-muted">Voice requires an API key.</p>;
     }
     const color = isSessionActive ? 'bg-red-500' : 'bg-primary';
 

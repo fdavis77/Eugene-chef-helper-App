@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { analyzeImage, getRecipeFromImage } from '../services/geminiService';
+import { analyzeImage, getRecipeFromImage } from '../services/claudeService';
 import { Card } from './common/Card';
 import { Loader } from './common/Loader';
 import { Icon } from './common/Icon';

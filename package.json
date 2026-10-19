@@ -9,10 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react-dom": "^19.2.0",
+    "@anthropic-ai/sdk": "^0.135.0",
+    "lottie-web": "^5.13.0",
     "react": "^19.2.0",
-    "@google/genai": "^1.29.1",
-    "lottie-web": "^5.13.0"
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

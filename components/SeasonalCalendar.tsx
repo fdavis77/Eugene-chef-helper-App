@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { getSeasonalProduce } from '../services/geminiService';
+import { getSeasonalProduce } from '../services/claudeService';
 import { Card } from './common/Card';
 import { Loader } from './common/Loader';
 import { Icon } from './common/Icon';
