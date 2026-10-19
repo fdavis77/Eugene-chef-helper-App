@@ -6,11 +6,11 @@
 **Branch:** claude/focused-brown-gao06n
 
 **Recent commits:**
-- 758d6f5 chore: Update session state
-- 8033a9d chore: Update session state
-- 2240737 chore: Update session state
-- 73d303f chore: Update session state
-- bab4a6d chore: Update session state and CLAUDE.md
+- 532f6bd feat: Apply Apple-style dark/gold retheme
+- eda7dd2 chore: Update session state
+- 2b2f7fc chore: Update session state
+- 064c6b0 chore: Update session state
+- 512b90c chore: Update session state
 
 **In-progress files (1):**
 - .anchor/session-state.md
@@ -20,5 +20,5 @@
 - Run tests before declaring task complete
 - Re-read CLAUDE.md if you're unsure of project conventions
 
-**Hook generated:** 2026-10-19 18:23:56 UTC
+**Hook generated:** 2026-10-19 18:59:11 UTC
 <!-- post-compact-recovery-end -->
